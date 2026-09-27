@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20260918-quick-order-status" />
+  <link rel="stylesheet" href="admin.css?v=20260926-product-archive" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -176,9 +176,15 @@
           <p class="step">Products</p>
           <h2>Weekly menu availability</h2>
         </div>
-        <button class="secondary-button compact-button" type="button" id="refresh-products">Refresh products</button>
+        <div class="toolbar-actions">
+          <label class="inline-check">
+            <input id="include-archived-products" type="checkbox" />
+            Show archived products
+          </label>
+          <button class="secondary-button compact-button" type="button" id="refresh-products">Refresh products</button>
+        </div>
       </div>
-      <p class="muted">Turn items off when you are not offering them. Inactive items disappear from the public order page.</p>
+      <p class="muted">Turn an item off for a temporary pause. Archive it when you no longer offer it; archived products can be restored later.</p>
       <form id="tax-settings-form" class="tax-settings-form">
         <label class="inline-check">
           <input id="tax-enabled-input" type="checkbox" />
@@ -384,6 +390,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260918-quick-order-status"></script>
+  <script src="admin.js?v=20260926-product-archive"></script>
 </body>
 </html>

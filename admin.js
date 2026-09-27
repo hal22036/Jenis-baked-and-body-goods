@@ -65,6 +65,7 @@ const el = {
   taxEnabledInput: document.querySelector("#tax-enabled-input"),
   taxBusinessStateInput: document.querySelector("#tax-business-state-input"),
   includeArchived: document.querySelector("#include-archived"),
+  includeArchivedProducts: document.querySelector("#include-archived-products"),
   orderPickupFilter: document.querySelector("#order-pickup-filter"),
   orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
   clearOrderFilters: document.querySelector("#clear-order-filters"),
@@ -314,6 +315,7 @@ el.couponTypeInput.addEventListener("change", syncCouponTypeFields);
 el.clearCouponForm.addEventListener("click", clearCouponForm);
 
 el.includeArchived.addEventListener("change", loadOrders);
+el.includeArchivedProducts.addEventListener("change", renderProducts);
 el.orderPickupFilter.addEventListener("change", renderOrders);
 el.orderInvoiceFilter.addEventListener("change", renderOrders);
 el.clearOrderFilters.addEventListener("click", () => {
@@ -479,7 +481,7 @@ function addManualItemRow(item = {}) {
 
 function manualProductOptions(selectedProductId) {
   return state.products
-    .filter(product => product.active || product.id === selectedProductId)
+    .filter(product => (product.active && !product.archived) || product.id === selectedProductId)
     .slice()
     .sort((a, b) => compareText(manualProductLabel(a), manualProductLabel(b)))
     .map(product => {
@@ -1675,7 +1677,7 @@ async function loadProducts() {
   state.products = data || [];
   renderProducts();
   refreshManualProductSelects();
-  setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} shown.`, "success");
+  setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} loaded.`, "success");
 }
 
 async function loadTaxSettings() {
@@ -1719,7 +1721,8 @@ function renderProducts() {
 
   renderProductAdminTabs();
 
-  const visibleProducts = productsForActiveAdminTab();
+  const visibleProducts = productsForActiveAdminTab()
+    .filter(product => el.includeArchivedProducts.checked || !product.archived);
 
   if (!visibleProducts.length) {
     el.productsList.innerHTML = "<p class=\"muted\">No products to show in this section.</p>";
@@ -1738,10 +1741,11 @@ function renderProducts() {
       <h3>${category}</h3>
       <div class="admin-products">
         ${products.map(product => `
-          <article class="admin-product-row ${product.active ? "" : "is-inactive"}" data-product-id="${product.id}">
+          <article class="admin-product-row ${product.archived ? "is-archived" : product.active ? "" : "is-inactive"}" data-product-id="${product.id}">
             <div>
               <strong>${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name}</strong>
               <p>
+                ${product.archived ? "Archived - " : ""}
                 ${money(product.price_cents)}
                 ${product.capacity_units > 0 ? "- counts toward loaf capacity" : "- add-on item"}
                 ${product.shippable ? "- can ship" : "- pickup only"}
@@ -1752,15 +1756,15 @@ function renderProducts() {
             <div class="admin-product-checks">
               <label class="inline-check product-active-check">
                 <span>Offer this week</span>
-                <input type="checkbox" data-product-active ${product.active ? "checked" : ""} />
+                <input type="checkbox" data-product-active ${product.active ? "checked" : ""} ${product.archived ? "disabled" : ""} />
               </label>
               <label class="inline-check product-active-check">
                 <span>Can ship</span>
-                <input type="checkbox" data-product-shippable ${product.shippable ? "checked" : ""} />
+                <input type="checkbox" data-product-shippable ${product.shippable ? "checked" : ""} ${product.archived ? "disabled" : ""} />
               </label>
               <label class="inline-check product-active-check">
                 <span>Track stock</span>
-                <input type="checkbox" data-product-track-inventory ${product.track_inventory ? "checked" : ""} />
+                <input type="checkbox" data-product-track-inventory ${product.track_inventory ? "checked" : ""} ${product.archived ? "disabled" : ""} />
               </label>
               <label class="product-inventory-field">
                 Inventory
@@ -1771,15 +1775,24 @@ function renderProducts() {
                   data-product-inventory
                   data-previous-value="${Number(product.inventory_quantity || 0)}"
                   value="${Number(product.inventory_quantity || 0)}"
+                  ${product.archived ? "disabled" : ""}
                 />
               </label>
               <label>
                 Tax type
-                <select data-product-tax-category data-previous-value="${product.tax_category || "home_bakery"}">
+                <select data-product-tax-category data-previous-value="${product.tax_category || "home_bakery"}" ${product.archived ? "disabled" : ""}>
                   ${option("home_bakery", "Home bakery food", product.tax_category || "home_bakery")}
                   ${option("general_product", "General product", product.tax_category || "home_bakery")}
                 </select>
               </label>
+              <button
+                class="secondary-button compact-button product-archive-button"
+                type="button"
+                data-product-archive
+                data-archived="${product.archived ? "true" : "false"}"
+              >
+                ${product.archived ? "Restore product" : "Archive product"}
+              </button>
             </div>
           </article>
         `).join("")}
@@ -1790,6 +1803,38 @@ function renderProducts() {
   el.productsList.querySelectorAll("[data-product-active], [data-product-shippable], [data-product-track-inventory], [data-product-inventory], [data-product-tax-category]").forEach(input => {
     input.addEventListener("change", saveProductFlags);
   });
+
+  el.productsList.querySelectorAll("[data-product-archive]").forEach(button => {
+    button.addEventListener("click", setProductArchived);
+  });
+}
+
+async function setProductArchived(event) {
+  const button = event.currentTarget;
+  const row = button.closest("[data-product-id]");
+  const isArchived = button.dataset.archived === "true";
+  const productName = row.querySelector("strong")?.textContent?.trim() || "this product";
+
+  if (!isArchived && !window.confirm(`Archive ${productName}? It will be removed from the store and in-person product lists.`)) {
+    return;
+  }
+
+  button.disabled = true;
+  setMessage(el.productAdminMessage, `${isArchived ? "Restoring" : "Archiving"} ${productName}...`);
+
+  const { error } = await supabaseClient.rpc("admin_set_product_archived", {
+    p_product_id: row.dataset.productId,
+    p_archived: !isArchived
+  });
+
+  if (error) {
+    button.disabled = false;
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  setMessage(el.productAdminMessage, `${productName} ${isArchived ? "restored" : "archived"}.`, "success");
+  await loadProducts();
 }
 
 function renderProductAdminTabs() {

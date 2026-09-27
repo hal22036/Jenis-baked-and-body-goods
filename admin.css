@@ -167,9 +167,19 @@
 }
 
 .admin-order.is-archived,
+.admin-product-row.is-archived,
 .admin-product-row.is-inactive,
 .coupon-row.is-inactive {
   opacity: 0.72;
+}
+
+.admin-product-row.is-archived {
+  border-style: dashed;
+  background: #f4f1ec;
+}
+
+.product-archive-button {
+  align-self: stretch;
 }
 
 .admin-order summary {

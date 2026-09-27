@@ -30,6 +30,7 @@ create table if not exists public.products (
   track_inventory boolean not null default false,
   inventory_quantity integer not null default 0 check (inventory_quantity >= 0),
   active boolean not null default true,
+  archived boolean not null default false,
   sort_order integer not null default 0
 );
 
@@ -330,6 +331,9 @@ alter table public.products
 add column if not exists shippable boolean not null default false;
 
 alter table public.products
+add column if not exists archived boolean not null default false;
+
+alter table public.products
 add column if not exists tax_category text not null default 'home_bakery';
 
 alter table public.products
@@ -497,7 +501,7 @@ alter table public.coupons enable row level security;
 drop policy if exists "Anyone can read active products" on public.products;
 create policy "Anyone can read active products"
 on public.products for select
-using (active = true);
+using (active = true and archived = false);
 
 drop policy if exists "Anyone can read pickup dates" on public.pickup_dates;
 create policy "Anyone can read pickup dates"
@@ -604,6 +608,7 @@ drop function if exists public.admin_update_product_active(uuid,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer);
+drop function if exists public.admin_set_product_archived(uuid,boolean);
 drop function if exists public.admin_get_tax_settings();
 drop function if exists public.admin_save_tax_settings(boolean,text);
 drop function if exists public.admin_list_coupons();
@@ -2219,6 +2224,7 @@ returns table(
   track_inventory boolean,
   inventory_quantity integer,
   active boolean,
+  archived boolean,
   sort_order integer
 )
 language plpgsql
@@ -2246,9 +2252,40 @@ begin
     p.track_inventory,
     p.inventory_quantity,
     p.active,
+    p.archived,
     p.sort_order
   from public.products p
   order by p.category asc, coalesce(p.display_group, p.name) asc, p.sort_order asc, coalesce(p.option_label, p.name) asc;
+end;
+$$;
+
+create or replace function public.admin_set_product_archived(
+  p_product_id uuid,
+  p_archived boolean
+)
+returns table(saved_id uuid, saved_archived boolean, saved_active boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  update public.products as p
+  set
+    archived = coalesce(p_archived, false),
+    active = case when coalesce(p_archived, false) then false else p.active end
+  where p.id = p_product_id
+  returning p.id, p.archived, p.active
+  into saved_id, saved_archived, saved_active;
+
+  if saved_id is null then
+    raise exception 'Product not found';
+  end if;
+
+  return next;
 end;
 $$;
 
@@ -2649,6 +2686,9 @@ revoke all on function public.adjust_product_inventory(uuid,integer) from public
 
 revoke all on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer) from public;
 grant execute on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer) to authenticated;
+
+revoke all on function public.admin_set_product_archived(uuid,boolean) from public;
+grant execute on function public.admin_set_product_archived(uuid,boolean) to authenticated;
 
 revoke all on function public.admin_get_tax_settings() from public;
 grant execute on function public.admin_get_tax_settings() to authenticated;
