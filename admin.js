@@ -1153,6 +1153,14 @@ function orderCardMarkup(order) {
             >
               Fulfilled
             </button>
+            <button
+              class="quick-status-button"
+              type="button"
+              data-quick-status="archive"
+              ${order.archived ? "disabled" : ""}
+            >
+              Archive
+            </button>
           </div>
         </div>
       </summary>
@@ -1560,6 +1568,12 @@ async function saveQuickOrderStatus(event) {
 
   if (action === "fulfilled") {
     card.querySelector("[data-fulfillment-status]").value = "fulfilled";
+  }
+
+  if (action === "archive") {
+    const customerName = card.querySelector(".order-summary h3")?.textContent?.trim() || "this order";
+    if (!window.confirm(`Archive ${customerName}'s order?`)) return;
+    card.querySelector("[data-archived]").checked = true;
   }
 
   await saveOrderStatus(event);
