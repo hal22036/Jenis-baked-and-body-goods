@@ -68,6 +68,7 @@ const el = {
   includeArchivedProducts: document.querySelector("#include-archived-products"),
   orderPickupFilter: document.querySelector("#order-pickup-filter"),
   orderInvoiceFilter: document.querySelector("#order-invoice-filter"),
+  orderPhoneFilter: document.querySelector("#order-phone-filter"),
   clearOrderFilters: document.querySelector("#clear-order-filters"),
   manualOrderForm: document.querySelector("#manual-order-form"),
   manualPickupDate: document.querySelector("#manual-pickup-date"),
@@ -318,9 +319,11 @@ el.includeArchived.addEventListener("change", loadOrders);
 el.includeArchivedProducts.addEventListener("change", renderProducts);
 el.orderPickupFilter.addEventListener("change", renderOrders);
 el.orderInvoiceFilter.addEventListener("change", renderOrders);
+el.orderPhoneFilter.addEventListener("change", renderOrders);
 el.clearOrderFilters.addEventListener("click", () => {
   el.orderPickupFilter.value = "all";
   el.orderInvoiceFilter.value = "all";
+  el.orderPhoneFilter.value = "all";
   renderOrders();
 });
 el.closeLabelReview.addEventListener("click", closeLabelReview);
@@ -758,8 +761,9 @@ function filteredOrders() {
     const pickupDateMatches =
       el.orderPickupFilter.value === "all" || order.pickup_date === el.orderPickupFilter.value;
     const invoiceMatches = invoiceFilterMatches(order, el.orderInvoiceFilter.value);
+    const phoneMatches = phoneFilterMatches(order, el.orderPhoneFilter.value);
 
-    return pickupDateMatches && invoiceMatches;
+    return pickupDateMatches && invoiceMatches && phoneMatches;
   });
 }
 
@@ -769,6 +773,27 @@ function invoiceFilterMatches(order, filter) {
   if (filter === "sent") return order.invoice_sent;
   if (filter === "not-requested") return !order.invoice_requested;
   return true;
+}
+
+function phoneFilterMatches(order, filter) {
+  const hasValidPhone = hasValidCustomerPhone(order.customer_phone);
+  if (filter === "missing") return !hasValidPhone;
+  if (filter === "complete") return hasValidPhone;
+  return true;
+}
+
+function hasValidCustomerPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith("1"));
+}
+
+function customerPhoneMarkup(phone) {
+  const value = String(phone || "").trim();
+  if (!value) return '<span class="missing-customer-info">Missing phone</span>';
+  if (!hasValidCustomerPhone(value)) {
+    return `<span class="missing-customer-info">${escapeHtml(value)} (check number)</span>`;
+  }
+  return `<a href="tel:${escapeAttribute(value)}">${escapeHtml(value)}</a>`;
 }
 
 function renderOrders() {
@@ -1169,7 +1194,7 @@ function orderCardMarkup(order) {
 
       <dl class="admin-details">
         <div><dt>Order placed</dt><dd>${prettyDateTime(order.created_at)}</dd></div>
-        <div><dt>Phone</dt><dd><a href="tel:${order.customer_phone}">${order.customer_phone}</a></dd></div>
+        <div><dt>Phone</dt><dd>${customerPhoneMarkup(order.customer_phone)}</dd></div>
         <div><dt>Email</dt><dd>${order.customer_email ? `<a href="mailto:${order.customer_email}">${order.customer_email}</a>` : "Not provided"}</dd></div>
         <div><dt>Payment</dt><dd>${paymentLabel(order.payment_method)} &middot; ${statusLabel(order.payment_status)}</dd></div>
         <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>

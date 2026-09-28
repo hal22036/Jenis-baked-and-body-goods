@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20260926-product-archive" />
+  <link rel="stylesheet" href="admin.css?v=20260928-phone-audit" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -73,6 +73,14 @@
             <option value="requested">Requested</option>
             <option value="sent">Sent</option>
             <option value="not-requested">Not requested</option>
+          </select>
+        </label>
+        <label>
+          Phone status
+          <select id="order-phone-filter">
+            <option value="all">All phone statuses</option>
+            <option value="missing">Missing or invalid phone</option>
+            <option value="complete">Has valid phone</option>
           </select>
         </label>
         <button class="secondary-button compact-button" type="button" id="clear-order-filters">Clear filters</button>
@@ -390,6 +398,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260928-quick-order-archive"></script>
+  <script src="admin.js?v=20260928-phone-audit"></script>
 </body>
 </html>

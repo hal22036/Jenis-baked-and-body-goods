@@ -532,6 +532,11 @@
   font-weight: 800;
 }
 
+.missing-customer-info {
+  color: #a12622;
+  font-weight: 900;
+}
+
 .order-quick-actions {
   display: flex;
   flex-wrap: wrap;
