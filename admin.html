@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20260928-phone-audit" />
+  <link rel="stylesheet" href="admin.css?v=20260928-rewards" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -38,6 +38,7 @@
         <a href="#orders" data-admin-page-link="orders">Orders</a>
         <a href="#dates" data-admin-page-link="dates">Order dates</a>
         <a href="#products" data-admin-page-link="products">Products</a>
+        <a href="#rewards" data-admin-page-link="rewards">Rewards</a>
         <a href="#coupons" data-admin-page-link="coupons">Coupons</a>
       </div>
       <button class="secondary-button compact-button" type="button" id="admin-sign-out">Sign out</button>
@@ -260,6 +261,57 @@
       <div id="products-list" class="products-list"></div>
     </section>
 
+    <section class="panel" id="rewards-panel" hidden>
+      <div class="admin-toolbar">
+        <div>
+          <p class="step">Rewards</p>
+          <h2>Customer rewards</h2>
+        </div>
+        <button class="secondary-button compact-button" type="button" id="refresh-rewards">Refresh rewards</button>
+      </div>
+      <p class="muted">Paid, non-canceled orders earn one credit per bread loaf or granola bag. Every 10 credits earns one reward.</p>
+
+      <form id="reward-adjustment-form" class="reward-adjustment-form">
+        <div class="reward-adjustment-heading">
+          <strong>Add legacy credit or correction</strong>
+          <span class="muted">Use purchases from your older spreadsheet, or enter a negative number to correct a balance.</span>
+        </div>
+        <label>
+          Customer name
+          <input id="reward-customer-name" placeholder="Customer name" />
+        </label>
+        <label>
+          Phone
+          <input id="reward-customer-phone" type="tel" autocomplete="tel" placeholder="(000) 000-0000" required />
+        </label>
+        <label>
+          Bread credits
+          <input id="reward-bread-delta" type="number" step="1" value="0" />
+        </label>
+        <label>
+          Granola credits
+          <input id="reward-granola-delta" type="number" step="1" value="0" />
+        </label>
+        <label class="reward-note-field">
+          Note
+          <input id="reward-adjustment-note" placeholder="Legacy spreadsheet purchases or correction" />
+        </label>
+        <div class="reward-adjustment-actions">
+          <button type="submit">Save adjustment</button>
+          <button class="secondary-button" type="button" id="clear-reward-adjustment">Clear</button>
+        </div>
+      </form>
+
+      <div class="reward-tools">
+        <label>
+          Find customer
+          <input id="reward-search" type="search" placeholder="Search name or phone" />
+        </label>
+      </div>
+      <p id="reward-admin-message" class="message" role="status"></p>
+      <div id="rewards-list" class="rewards-list"></div>
+    </section>
+
     <section class="panel" id="coupons-panel" hidden>
       <div class="admin-toolbar">
         <div>
@@ -398,6 +450,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260928-phone-audit"></script>
+  <script src="admin.js?v=20260928-rewards"></script>
 </body>
 </html>

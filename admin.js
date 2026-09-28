@@ -11,6 +11,7 @@ const state = {
   activeProductAdminTab: "baked-goods",
   pendingPrintLabels: [],
   coupons: [],
+  rewards: [],
   taxSettings: null
 };
 
@@ -39,12 +40,14 @@ const el = {
   adminPanel: document.querySelector("#admin-panel"),
   datesPanel: document.querySelector("#dates-panel"),
   productsPanel: document.querySelector("#products-panel"),
+  rewardsPanel: document.querySelector("#rewards-panel"),
   couponsPanel: document.querySelector("#coupons-panel"),
   loginForm: document.querySelector("#admin-login-form"),
   loginMessage: document.querySelector("#login-message"),
   adminMessage: document.querySelector("#admin-message"),
   dateAdminMessage: document.querySelector("#date-admin-message"),
   productAdminMessage: document.querySelector("#product-admin-message"),
+  rewardAdminMessage: document.querySelector("#reward-admin-message"),
   couponAdminMessage: document.querySelector("#coupon-admin-message"),
   labelReviewModal: document.querySelector("#label-review-modal"),
   labelReviewTitle: document.querySelector("#label-review-title"),
@@ -59,6 +62,7 @@ const el = {
   ordersList: document.querySelector("#orders-list"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
+  rewardsList: document.querySelector("#rewards-list"),
   productAdminTabs: document.querySelector("#product-admin-tabs"),
   couponsList: document.querySelector("#coupons-list"),
   taxSettingsForm: document.querySelector("#tax-settings-form"),
@@ -93,6 +97,7 @@ const el = {
   syncGoogleSheet: document.querySelector("#sync-google-sheet"),
   refreshOrders: document.querySelector("#refresh-orders"),
   refreshProducts: document.querySelector("#refresh-products"),
+  refreshRewards: document.querySelector("#refresh-rewards"),
   refreshCoupons: document.querySelector("#refresh-coupons"),
   signOut: document.querySelector("#admin-sign-out"),
   pickupDateForm: document.querySelector("#pickup-date-form"),
@@ -117,13 +122,22 @@ const el = {
   couponEndInput: document.querySelector("#coupon-end-input"),
   couponMaxUsesInput: document.querySelector("#coupon-max-uses-input"),
   couponActiveInput: document.querySelector("#coupon-active-input"),
-  clearCouponForm: document.querySelector("#clear-coupon-form")
+  clearCouponForm: document.querySelector("#clear-coupon-form"),
+  rewardAdjustmentForm: document.querySelector("#reward-adjustment-form"),
+  rewardCustomerName: document.querySelector("#reward-customer-name"),
+  rewardCustomerPhone: document.querySelector("#reward-customer-phone"),
+  rewardBreadDelta: document.querySelector("#reward-bread-delta"),
+  rewardGranolaDelta: document.querySelector("#reward-granola-delta"),
+  rewardAdjustmentNote: document.querySelector("#reward-adjustment-note"),
+  clearRewardAdjustment: document.querySelector("#clear-reward-adjustment"),
+  rewardSearch: document.querySelector("#reward-search")
 };
 
 const adminPages = {
   orders: el.adminPanel,
   dates: el.datesPanel,
   products: el.productsPanel,
+  rewards: el.rewardsPanel,
   coupons: el.couponsPanel
 };
 
@@ -242,6 +256,7 @@ function showLogin() {
   el.adminPanel.hidden = true;
   el.datesPanel.hidden = true;
   el.productsPanel.hidden = true;
+  el.rewardsPanel.hidden = true;
   el.couponsPanel.hidden = true;
 }
 
@@ -249,7 +264,7 @@ async function showAdmin() {
   el.loginPanel.hidden = true;
   el.adminPageNav.hidden = false;
   await loadPickupDates();
-  await Promise.all([loadOrders(), loadProducts(), loadCoupons(), loadTaxSettings()]);
+  await Promise.all([loadOrders(), loadProducts(), loadRewards(), loadCoupons(), loadTaxSettings()]);
   showAdminPage(currentAdminPage());
 }
 
@@ -310,6 +325,11 @@ el.refreshOrders.addEventListener("click", () => {
 
 el.syncGoogleSheet.addEventListener("click", syncGoogleSheetNow);
 el.refreshProducts.addEventListener("click", loadProducts);
+el.refreshRewards.addEventListener("click", loadRewards);
+el.rewardAdjustmentForm.addEventListener("submit", saveRewardAdjustment);
+el.clearRewardAdjustment.addEventListener("click", clearRewardAdjustmentForm);
+el.rewardSearch.addEventListener("input", renderRewards);
+el.rewardsList.addEventListener("click", handleRewardAction);
 el.taxSettingsForm.addEventListener("submit", saveTaxSettings);
 el.refreshCoupons.addEventListener("click", loadCoupons);
 el.couponTypeInput.addEventListener("change", syncCouponTypeFields);
@@ -714,7 +734,7 @@ async function saveManualOrder(event) {
   const savedOrder = Array.isArray(data) ? data[0] : data;
   clearManualOrderForm();
   setMessage(el.manualOrderMessage, `Saved order ${savedOrder?.order_code || ""}.`, "success");
-  await Promise.all([loadOrders(), loadPickupDates()]);
+  await Promise.all([loadOrders(), loadPickupDates(), loadRewards()]);
 }
 
 async function loadOrders() {
@@ -794,6 +814,183 @@ function customerPhoneMarkup(phone) {
     return `<span class="missing-customer-info">${escapeHtml(value)} (check number)</span>`;
   }
   return `<a href="tel:${escapeAttribute(value)}">${escapeHtml(value)}</a>`;
+}
+
+function normalizedPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+}
+
+function formattedPhone(phone) {
+  const digits = normalizedPhone(phone);
+  if (digits.length !== 10) return String(phone || "");
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+async function loadRewards() {
+  setMessage(el.rewardAdminMessage, "Loading rewards...");
+
+  const { data, error } = await supabaseClient.rpc("admin_list_rewards");
+
+  if (error) {
+    setMessage(el.rewardAdminMessage, error.message, "error");
+    return;
+  }
+
+  state.rewards = data || [];
+  renderRewards();
+}
+
+function renderRewards() {
+  const search = el.rewardSearch.value.trim().toLowerCase();
+  const searchDigits = search.replace(/\D/g, "");
+  const rewards = state.rewards.filter(reward => {
+    if (!search) return true;
+    return String(reward.customer_name || "").toLowerCase().includes(search)
+      || (searchDigits && normalizedPhone(reward.customer_phone).includes(searchDigits));
+  });
+
+  if (!rewards.length) {
+    el.rewardsList.innerHTML = `<p class="muted">${state.rewards.length ? "No customers match that search." : "No reward activity yet."}</p>`;
+    setMessage(el.rewardAdminMessage, `${rewards.length} customers shown.`, "success");
+    return;
+  }
+
+  el.rewardsList.innerHTML = rewards.map(reward => rewardCardMarkup(reward)).join("");
+  setMessage(el.rewardAdminMessage, `${rewards.length} customer${rewards.length === 1 ? "" : "s"} shown.`, "success");
+}
+
+function rewardCardMarkup(reward) {
+  const breadProgress = Number(reward.bread_progress || 0);
+  const granolaProgress = Number(reward.granola_progress || 0);
+  const breadAvailable = Number(reward.bread_rewards_available || 0);
+  const granolaAvailable = Number(reward.granola_rewards_available || 0);
+
+  return `
+    <article class="reward-card" data-reward-phone="${escapeAttribute(reward.phone_key)}" data-reward-name="${escapeAttribute(reward.customer_name || "")}">
+      <div class="reward-card-heading">
+        <div>
+          <h3>${escapeHtml(reward.customer_name || "Customer")}</h3>
+          <a href="tel:${escapeAttribute(reward.customer_phone)}">${escapeHtml(formattedPhone(reward.customer_phone))}</a>
+        </div>
+        <div class="reward-customer-totals">
+          <strong>${money(Number(reward.total_spent_cents || 0))}</strong>
+          <span>${Number(reward.order_count || 0)} paid order${Number(reward.order_count || 0) === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+      <div class="reward-progress-grid">
+        ${rewardProgressMarkup("Bread loaves", breadProgress, breadAvailable, "bread")}
+        ${rewardProgressMarkup("Granola bags", granolaProgress, granolaAvailable, "granola")}
+      </div>
+      <div class="reward-actions">
+        <button class="secondary-button compact-button" type="button" data-reward-action="adjust">Add or correct credits</button>
+      </div>
+    </article>
+  `;
+}
+
+function rewardProgressMarkup(label, progress, available, type) {
+  const rewardName = type === "bread"
+    ? (available === 1 ? "free Classic White loaf" : "free Classic White loaves")
+    : (available === 1 ? "$12 granola reward" : "$12 granola rewards");
+  const availableText = `${available} ${rewardName} available`;
+
+  return `
+    <section class="reward-progress">
+      <div class="reward-progress-heading">
+        <strong>${label}</strong>
+        <span>${progress} of 10</span>
+      </div>
+      <div class="reward-meter" aria-label="${progress} of 10 ${label.toLowerCase()}">
+        <span style="width: ${Math.min(progress * 10, 100)}%"></span>
+      </div>
+      <p>${available ? availableText : `${10 - progress} more until the next reward`}</p>
+      <button class="reward-redeem-button" type="button" data-reward-action="redeem" data-reward-type="${type}" ${available ? "" : "disabled"}>
+        Redeem one
+      </button>
+    </section>
+  `;
+}
+
+function clearRewardAdjustmentForm() {
+  el.rewardAdjustmentForm.reset();
+  el.rewardBreadDelta.value = "0";
+  el.rewardGranolaDelta.value = "0";
+}
+
+function fillRewardAdjustmentForm(card) {
+  el.rewardCustomerName.value = card.dataset.rewardName || "";
+  el.rewardCustomerPhone.value = formattedPhone(card.dataset.rewardPhone || "");
+  el.rewardBreadDelta.value = "0";
+  el.rewardGranolaDelta.value = "0";
+  el.rewardAdjustmentNote.value = "";
+  el.rewardCustomerName.focus();
+  el.rewardAdjustmentForm.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function handleRewardAction(event) {
+  const button = event.target.closest("[data-reward-action]");
+  if (!button) return;
+
+  const card = button.closest("[data-reward-phone]");
+  if (button.dataset.rewardAction === "adjust") {
+    fillRewardAdjustmentForm(card);
+    return;
+  }
+
+  const type = button.dataset.rewardType;
+  const rewardName = type === "bread" ? "a free Classic White loaf" : "a $12 granola reward";
+  if (!window.confirm(`Mark ${rewardName} as redeemed for ${card.dataset.rewardName}?`)) return;
+
+  button.disabled = true;
+  await applyRewardAdjustment({
+    customerName: card.dataset.rewardName,
+    customerPhone: card.dataset.rewardPhone,
+    breadDelta: type === "bread" ? -10 : 0,
+    granolaDelta: type === "granola" ? -10 : 0,
+    note: `Redeemed ${rewardName}`
+  });
+}
+
+async function saveRewardAdjustment(event) {
+  event.preventDefault();
+  const breadDelta = Number(el.rewardBreadDelta.value || 0);
+  const granolaDelta = Number(el.rewardGranolaDelta.value || 0);
+
+  if (!Number.isInteger(breadDelta) || !Number.isInteger(granolaDelta) || (!breadDelta && !granolaDelta)) {
+    setMessage(el.rewardAdminMessage, "Enter a whole-number bread or granola adjustment.", "error");
+    return;
+  }
+
+  await applyRewardAdjustment({
+    customerName: el.rewardCustomerName.value.trim(),
+    customerPhone: el.rewardCustomerPhone.value.trim(),
+    breadDelta,
+    granolaDelta,
+    note: el.rewardAdjustmentNote.value.trim()
+  });
+}
+
+async function applyRewardAdjustment({ customerName, customerPhone, breadDelta, granolaDelta, note }) {
+  setMessage(el.rewardAdminMessage, "Saving reward adjustment...");
+
+  const { error } = await supabaseClient.rpc("admin_adjust_rewards", {
+    p_customer_phone: customerPhone,
+    p_customer_name: customerName,
+    p_bread_delta: breadDelta,
+    p_granola_delta: granolaDelta,
+    p_note: note
+  });
+
+  if (error) {
+    setMessage(el.rewardAdminMessage, error.message, "error");
+    renderRewards();
+    return;
+  }
+
+  clearRewardAdjustmentForm();
+  await loadRewards();
+  setMessage(el.rewardAdminMessage, "Reward balance updated.", "success");
 }
 
 function renderOrders() {
@@ -1289,6 +1486,10 @@ function orderCardMarkup(order) {
           Receipt email
           <input data-customer-email type="email" value="${escapeAttribute(order.customer_email || "")}" placeholder="customer@example.com" />
         </label>
+        <label>
+          Customer phone
+          <input data-customer-phone type="tel" autocomplete="tel" value="${escapeAttribute(order.customer_phone || "")}" placeholder="(000) 000-0000" />
+        </label>
         <label class="inline-check invoice-requested-check">
           <input type="checkbox" data-invoice-requested ${order.invoice_requested ? "checked" : ""} />
           Receipt requested
@@ -1566,7 +1767,8 @@ async function saveOrderStatus(event) {
     p_archived: card.querySelector("[data-archived]").checked,
     p_invoice_requested: invoiceRequested,
     p_invoice_sent: invoiceSent,
-    p_customer_email: card.querySelector("[data-customer-email]").value.trim()
+    p_customer_email: card.querySelector("[data-customer-email]").value.trim(),
+    p_customer_phone: card.querySelector("[data-customer-phone]").value.trim()
   });
 
   button.disabled = false;
@@ -1577,7 +1779,7 @@ async function saveOrderStatus(event) {
   }
 
   setMessage(message, "Saved.", "success");
-  await Promise.all([loadOrders(), loadPickupDates()]);
+  await Promise.all([loadOrders(), loadPickupDates(), loadRewards()]);
 }
 
 async function saveQuickOrderStatus(event) {
@@ -1650,7 +1852,7 @@ async function saveOrderItems(event) {
 
   const savedOrder = Array.isArray(data) ? data[0] : data;
   setMessage(message, `Items saved. New total: ${money(savedOrder?.total_cents || 0)}.`, "success");
-  await Promise.all([loadOrders(), loadPickupDates()]);
+  await Promise.all([loadOrders(), loadPickupDates(), loadRewards()]);
 }
 
 async function archivePickupDateOrders(event) {

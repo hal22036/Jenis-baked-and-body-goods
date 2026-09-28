@@ -108,6 +108,18 @@ create table if not exists public.app_settings (
   value text not null
 );
 
+create table if not exists public.reward_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  phone_key text not null,
+  customer_name text,
+  bread_delta integer not null default 0,
+  granola_delta integer not null default 0,
+  note text,
+  created_at timestamptz not null default now(),
+  created_by uuid default auth.uid(),
+  constraint reward_adjustments_has_change check (bread_delta <> 0 or granola_delta <> 0)
+);
+
 create table if not exists public.sales_tax_rates (
   state_code text primary key,
   state_name text not null,
@@ -497,6 +509,7 @@ alter table public.order_items enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.app_settings enable row level security;
 alter table public.coupons enable row level security;
+alter table public.reward_adjustments enable row level security;
 
 drop policy if exists "Anyone can read active products" on public.products;
 create policy "Anyone can read active products"
@@ -595,6 +608,7 @@ drop function if exists public.admin_update_order_status(uuid,text,text,boolean,
 drop function if exists public.admin_update_order_status(uuid,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_status(uuid,text,text,text,boolean,boolean,boolean,text);
 drop function if exists public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text);
+drop function if exists public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text,text);
 drop function if exists public.admin_update_order_items(uuid,jsonb);
 drop function if exists public.admin_update_order_items(uuid,integer,integer,jsonb);
 drop function if exists public.admin_archive_orders_for_pickup_date(date);
@@ -615,6 +629,9 @@ drop function if exists public.admin_list_coupons();
 drop function if exists public.admin_save_coupon(text,text,text,text,integer,integer,integer,date,date,integer,boolean);
 drop function if exists public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean);
 drop function if exists public.admin_remove_coupon(text);
+drop function if exists public.admin_adjust_rewards(text,text,integer,integer,text);
+drop function if exists public.admin_list_rewards();
+drop function if exists public.normalize_customer_phone(text);
 
 create or replace function public.validate_coupon_code(
   p_coupon_code text,
@@ -1514,7 +1531,8 @@ create or replace function public.admin_update_order_status(
   p_archived boolean,
   p_invoice_requested boolean,
   p_invoice_sent boolean,
-  p_customer_email text
+  p_customer_email text,
+  p_customer_phone text
 )
 returns table(
   order_id uuid,
@@ -1523,7 +1541,8 @@ returns table(
   archived boolean,
   invoice_requested boolean,
   invoice_sent boolean,
-  customer_email text
+  customer_email text,
+  customer_phone text
 )
 language plpgsql
 security definer
@@ -1609,7 +1628,8 @@ begin
     archived = p_archived,
     invoice_requested = coalesce(p_invoice_requested, false) or coalesce(p_invoice_sent, false),
     invoice_sent = coalesce(p_invoice_sent, false),
-    customer_email = nullif(trim(coalesce(p_customer_email, '')), '')
+    customer_email = nullif(trim(coalesce(p_customer_email, '')), ''),
+    customer_phone = trim(coalesce(p_customer_phone, ''))
   where o.id = p_order_id;
 
   if not found then
@@ -1624,7 +1644,8 @@ begin
     o.archived,
     o.invoice_requested,
     o.invoice_sent,
-    o.customer_email
+    o.customer_email,
+    o.customer_phone
   from public.orders o
   where o.id = p_order_id;
 end;
@@ -2289,6 +2310,229 @@ begin
 end;
 $$;
 
+create or replace function public.normalize_customer_phone(p_phone text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  with cleaned as (
+    select regexp_replace(coalesce(p_phone, ''), '\D', '', 'g') as digits
+  )
+  select case
+    when length(digits) = 11 and left(digits, 1) = '1' then right(digits, 10)
+    else digits
+  end
+  from cleaned;
+$$;
+
+create or replace function public.admin_list_rewards()
+returns table(
+  phone_key text,
+  customer_name text,
+  customer_phone text,
+  order_count bigint,
+  total_spent_cents bigint,
+  bread_purchases bigint,
+  granola_purchases bigint,
+  bread_adjustments bigint,
+  granola_adjustments bigint,
+  bread_total bigint,
+  granola_total bigint,
+  bread_rewards_available bigint,
+  granola_rewards_available bigint,
+  bread_progress integer,
+  granola_progress integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  with eligible_orders as (
+    select
+      o.id,
+      public.normalize_customer_phone(o.customer_phone) as phone_key,
+      o.customer_name,
+      o.customer_phone,
+      o.total_cents,
+      o.created_at
+    from public.orders o
+    where o.payment_status = 'paid'
+      and o.fulfillment_status <> 'canceled'
+      and public.normalize_customer_phone(o.customer_phone) ~ '^[0-9]{10}$'
+  ),
+  latest_order_customer as (
+    select distinct on (eo.phone_key)
+      eo.phone_key,
+      eo.customer_name,
+      eo.customer_phone
+    from eligible_orders eo
+    order by eo.phone_key, eo.created_at desc
+  ),
+  order_summary as (
+    select
+      eo.phone_key,
+      count(*)::bigint as order_count,
+      coalesce(sum(eo.total_cents), 0)::bigint as total_spent_cents
+    from eligible_orders eo
+    group by eo.phone_key
+  ),
+  item_summary as (
+    select
+      eo.phone_key,
+      coalesce(sum(
+        case
+          when coalesce(p.capacity_units, oi.custom_capacity_units, 0) > 0
+            then oi.quantity * coalesce(p.capacity_units, oi.custom_capacity_units, 0)
+          else 0
+        end
+      ), 0)::bigint as bread_purchases,
+      coalesce(sum(
+        case
+          when lower(trim(coalesce(p.display_group, ''))) = 'homemade granola'
+            or lower(trim(coalesce(p.name, oi.custom_name, ''))) like '%granola%'
+            then oi.quantity
+          else 0
+        end
+      ), 0)::bigint as granola_purchases
+    from eligible_orders eo
+    join public.order_items oi on oi.order_id = eo.id
+    left join public.products p on p.id = oi.product_id
+    group by eo.phone_key
+  ),
+  adjustment_summary as (
+    select
+      ra.phone_key,
+      coalesce(sum(ra.bread_delta), 0)::bigint as bread_adjustments,
+      coalesce(sum(ra.granola_delta), 0)::bigint as granola_adjustments
+    from public.reward_adjustments ra
+    group by ra.phone_key
+  ),
+  latest_adjustment_customer as (
+    select distinct on (ra.phone_key)
+      ra.phone_key,
+      ra.customer_name
+    from public.reward_adjustments ra
+    where nullif(trim(coalesce(ra.customer_name, '')), '') is not null
+    order by ra.phone_key, ra.created_at desc
+  ),
+  reward_customers as (
+    select os.phone_key from order_summary os
+    union
+    select a.phone_key from adjustment_summary a
+  ),
+  reward_totals as (
+    select
+      rc.phone_key,
+      coalesce(loc.customer_name, lac.customer_name, 'Customer') as customer_name,
+      coalesce(loc.customer_phone, rc.phone_key) as customer_phone,
+      coalesce(os.order_count, 0)::bigint as order_count,
+      coalesce(os.total_spent_cents, 0)::bigint as total_spent_cents,
+      coalesce(i.bread_purchases, 0)::bigint as bread_purchases,
+      coalesce(i.granola_purchases, 0)::bigint as granola_purchases,
+      coalesce(a.bread_adjustments, 0)::bigint as bread_adjustments,
+      coalesce(a.granola_adjustments, 0)::bigint as granola_adjustments,
+      greatest(coalesce(i.bread_purchases, 0) + coalesce(a.bread_adjustments, 0), 0)::bigint as bread_total,
+      greatest(coalesce(i.granola_purchases, 0) + coalesce(a.granola_adjustments, 0), 0)::bigint as granola_total
+    from reward_customers rc
+    left join order_summary os on os.phone_key = rc.phone_key
+    left join item_summary i on i.phone_key = rc.phone_key
+    left join adjustment_summary a on a.phone_key = rc.phone_key
+    left join latest_order_customer loc on loc.phone_key = rc.phone_key
+    left join latest_adjustment_customer lac on lac.phone_key = rc.phone_key
+  )
+  select
+    rt.phone_key,
+    rt.customer_name,
+    rt.customer_phone,
+    rt.order_count,
+    rt.total_spent_cents,
+    rt.bread_purchases,
+    rt.granola_purchases,
+    rt.bread_adjustments,
+    rt.granola_adjustments,
+    rt.bread_total,
+    rt.granola_total,
+    (rt.bread_total / 10)::bigint,
+    (rt.granola_total / 10)::bigint,
+    mod(rt.bread_total, 10)::integer,
+    mod(rt.granola_total, 10)::integer
+  from reward_totals rt
+  order by rt.customer_name asc, rt.customer_phone asc;
+end;
+$$;
+
+create or replace function public.admin_adjust_rewards(
+  p_customer_phone text,
+  p_customer_name text,
+  p_bread_delta integer,
+  p_granola_delta integer,
+  p_note text
+)
+returns table(
+  phone_key text,
+  customer_name text,
+  customer_phone text,
+  order_count bigint,
+  total_spent_cents bigint,
+  bread_purchases bigint,
+  granola_purchases bigint,
+  bread_adjustments bigint,
+  granola_adjustments bigint,
+  bread_total bigint,
+  granola_total bigint,
+  bread_rewards_available bigint,
+  granola_rewards_available bigint,
+  bread_progress integer,
+  granola_progress integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_phone text := public.normalize_customer_phone(p_customer_phone);
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if v_phone !~ '^[0-9]{10}$' then
+    raise exception 'Enter a valid 10-digit customer phone number';
+  end if;
+
+  if coalesce(p_bread_delta, 0) = 0 and coalesce(p_granola_delta, 0) = 0 then
+    raise exception 'Enter a bread or granola adjustment';
+  end if;
+
+  insert into public.reward_adjustments (
+    phone_key,
+    customer_name,
+    bread_delta,
+    granola_delta,
+    note
+  )
+  values (
+    v_phone,
+    nullif(trim(coalesce(p_customer_name, '')), ''),
+    coalesce(p_bread_delta, 0),
+    coalesce(p_granola_delta, 0),
+    nullif(trim(coalesce(p_note, '')), '')
+  );
+
+  return query
+  select *
+  from public.admin_list_rewards() r
+  where r.phone_key = v_phone;
+end;
+$$;
+
 create or replace function public.admin_update_product_flags(
   p_product_id uuid,
   p_active boolean,
@@ -2661,8 +2905,8 @@ grant execute on function public.is_admin() to authenticated;
 revoke all on function public.admin_list_orders(boolean) from public;
 grant execute on function public.admin_list_orders(boolean) to authenticated;
 
-revoke all on function public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text) from public;
-grant execute on function public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text) to authenticated;
+revoke all on function public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text,text) from public;
+grant execute on function public.admin_update_order_status(uuid,uuid,text,text,text,boolean,boolean,boolean,text,text) to authenticated;
 
 revoke all on function public.admin_update_order_items(uuid,integer,integer,jsonb) from public;
 grant execute on function public.admin_update_order_items(uuid,integer,integer,jsonb) to authenticated;
@@ -2689,6 +2933,14 @@ grant execute on function public.admin_update_product_flags(uuid,boolean,boolean
 
 revoke all on function public.admin_set_product_archived(uuid,boolean) from public;
 grant execute on function public.admin_set_product_archived(uuid,boolean) to authenticated;
+
+revoke all on function public.normalize_customer_phone(text) from public;
+
+revoke all on function public.admin_list_rewards() from public;
+grant execute on function public.admin_list_rewards() to authenticated;
+
+revoke all on function public.admin_adjust_rewards(text,text,integer,integer,text) from public;
+grant execute on function public.admin_adjust_rewards(text,text,integer,integer,text) to authenticated;
 
 revoke all on function public.admin_get_tax_settings() from public;
 grant execute on function public.admin_get_tax_settings() to authenticated;
