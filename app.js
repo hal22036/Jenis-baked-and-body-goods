@@ -85,6 +85,9 @@ const state = {
   quantities: {},
   itemNotes: {},
   coupon: null,
+  reward: null,
+  rewardStatus: null,
+  rewardPhone: null,
   orderTotals: null,
   lastOrder: null,
   isSubmitting: false
@@ -119,6 +122,9 @@ const el = {
   couponMessage: document.querySelector("#coupon-message"),
   applyCoupon: document.querySelector("#apply-coupon"),
   removeCoupon: document.querySelector("#remove-coupon"),
+  checkRewards: document.querySelector("#check-rewards"),
+  rewardMessage: document.querySelector("#reward-message"),
+  rewardOptions: document.querySelector("#reward-options"),
   tipAmount: document.querySelector("#tip-amount"),
   submit: document.querySelector("#submit-order"),
   reviewSection: document.querySelector("#review-section"),
@@ -309,8 +315,42 @@ function discountCents() {
   return state.coupon?.discount_cents || 0;
 }
 
+function isGranolaProduct(product) {
+  const group = cleanText(product?.display_group).toLowerCase();
+  const name = cleanText(product?.name).toLowerCase();
+  return group === "homemade granola"
+    || name.includes("granola")
+    || name.startsWith("toasted coconut almond");
+}
+
+function classicWhiteRewardDiscountCents() {
+  const product = state.products.find(item =>
+    cleanText(item.name).toLowerCase() === "classic white"
+      && Number(state.quantities[item.id] || 0) > 0
+  );
+  return Number(product?.price_cents || 0);
+}
+
+function granolaRewardDiscountCents() {
+  const granolaSubtotal = state.products.reduce((sum, product) => {
+    if (!isGranolaProduct(product)) return sum;
+    return sum + Number(state.quantities[product.id] || 0) * Number(product.price_cents || 0);
+  }, 0);
+  return Math.min(1200, granolaSubtotal);
+}
+
+function rewardDiscountCents() {
+  if (state.reward?.type === "bread") return classicWhiteRewardDiscountCents();
+  if (state.reward?.type === "granola") return granolaRewardDiscountCents();
+  return 0;
+}
+
+function rewardLabel(type = state.reward?.type) {
+  return type === "bread" ? "Free Classic White loaf" : "$12 granola reward";
+}
+
 function totalDiscountCents() {
-  return discountCents() + bathBombBundleDiscountCents();
+  return discountCents() + bathBombBundleDiscountCents() + rewardDiscountCents();
 }
 
 function itemNoteFor(productId) {
@@ -612,6 +652,141 @@ function resetCoupon(message = "") {
   state.orderTotals = null;
   el.removeCoupon.hidden = true;
   if (message) setCouponMessage(message, "error");
+}
+
+function setRewardMessage(message = "", type = "") {
+  el.rewardMessage.textContent = message;
+  el.rewardMessage.className = type ? `message ${type}` : "message";
+}
+
+function rewardAvailability(type) {
+  return Number(state.rewardStatus?.[`${type}_rewards_available`] || 0);
+}
+
+function rewardProgress(type) {
+  return Number(state.rewardStatus?.[`${type}_progress`] || 0);
+}
+
+function rewardEligibleInCart(type) {
+  return type === "bread"
+    ? classicWhiteRewardDiscountCents() > 0
+    : granolaRewardDiscountCents() > 0;
+}
+
+function rewardOptionMarkup(type, title, description) {
+  const available = rewardAvailability(type);
+  const progress = rewardProgress(type);
+  const eligible = rewardEligibleInCart(type);
+  const applied = state.reward?.type === type;
+  const actionLabel = applied ? "Remove reward" : "Use reward";
+  const availabilityText = available
+    ? `${available} available &middot; ${progress} of 10 toward the next`
+    : `${progress} of 10 toward the next reward`;
+  const cartMessage = available && !eligible
+    ? (type === "bread" ? "Add a Classic White loaf to use this reward." : "Add a granola bag to use this reward.")
+    : description;
+
+  return `
+    <div class="checkout-reward-option ${applied ? "is-applied" : ""}">
+      <strong>${title}</strong>
+      <span>${availabilityText}</span>
+      <span>${cartMessage}</span>
+      <button
+        class="${applied ? "secondary-button" : ""} compact-button"
+        type="button"
+        data-checkout-reward="${type}"
+        ${!applied && (!available || !eligible) ? "disabled" : ""}
+      >${actionLabel}</button>
+    </div>
+  `;
+}
+
+function renderRewardOptions() {
+  if (!state.rewardStatus) {
+    el.rewardOptions.hidden = true;
+    el.rewardOptions.innerHTML = "";
+    return;
+  }
+
+  el.rewardOptions.hidden = false;
+  el.rewardOptions.innerHTML = [
+    rewardOptionMarkup("bread", "Bread reward", "One free Classic White loaf."),
+    rewardOptionMarkup("granola", "Granola reward", "Up to $12 off eligible granola.")
+  ].join("");
+}
+
+function clearAppliedReward(message = "", type = "") {
+  state.reward = null;
+  state.orderTotals = null;
+  renderRewardOptions();
+  setRewardMessage(message, type);
+  updateSummary();
+  refreshCheckoutReview();
+}
+
+function resetRewards(message = "", type = "") {
+  state.reward = null;
+  state.rewardStatus = null;
+  state.rewardPhone = null;
+  state.orderTotals = null;
+  renderRewardOptions();
+  setRewardMessage(message, type);
+}
+
+async function lookupCustomerRewards() {
+  const phone = phoneDigits(el.customerPhone.value);
+  if (phone.length !== 10) {
+    resetRewards("Enter a 10-digit phone number above first.", "error");
+    el.customerPhone.focus();
+    return;
+  }
+
+  el.checkRewards.disabled = true;
+  setRewardMessage("Checking rewards...");
+
+  const { data, error } = await supabaseClient.rpc("get_customer_rewards", {
+    p_customer_phone: phone
+  });
+
+  el.checkRewards.disabled = false;
+  if (error) {
+    resetRewards(error.message || "Rewards could not be loaded. Please try again.", "error");
+    return;
+  }
+
+  state.reward = null;
+  state.rewardStatus = (Array.isArray(data) ? data[0] : data) || {};
+  state.rewardPhone = phone;
+  state.orderTotals = null;
+  renderRewardOptions();
+
+  const available = rewardAvailability("bread") + rewardAvailability("granola");
+  setRewardMessage(
+    available ? "Your rewards are ready to use." : "No rewards are available yet. Your progress is shown below.",
+    available ? "success" : ""
+  );
+  refreshCheckoutReview();
+}
+
+function toggleCheckoutReward(type) {
+  if (state.reward?.type === type) {
+    clearAppliedReward("Reward removed.");
+    return;
+  }
+
+  if (state.coupon) {
+    setRewardMessage("Remove the coupon before applying a reward.", "error");
+    return;
+  }
+
+  if (!rewardAvailability(type) || !rewardEligibleInCart(type)) return;
+
+  state.reward = { type };
+  state.orderTotals = null;
+  renderRewardOptions();
+  setRewardMessage(`${rewardLabel(type)} applied.`, "success");
+  updateSummary();
+  refreshCheckoutReview();
 }
 
 function fulfillmentMethod() {
@@ -955,7 +1130,9 @@ async function calculateOrderTotals() {
     p_home_bakery_subtotal_cents: selectedSubtotalByTaxCategory("home_bakery"),
     p_general_product_subtotal_cents: selectedSubtotalByTaxCategory("general_product"),
     p_discount_cents: totalDiscountCents(),
-    p_coupon_applies_to: bathBombBundleDiscountCents() ? "items" : state.coupon?.applies_to || null,
+    p_coupon_applies_to: bathBombBundleDiscountCents() || rewardDiscountCents()
+      ? "items"
+      : state.coupon?.applies_to || null,
     p_shipping_method: fulfillmentMethod(),
     p_tax_state: shippingIsSelected() ? cleanText(el.shippingState.value).toUpperCase() : null
   });
@@ -970,6 +1147,11 @@ async function calculateOrderTotals() {
 async function applyCouponCode() {
   const code = cleanText(el.couponCode.value).toUpperCase();
   const subtotal = Math.max(selectedTotalCents() - bathBombBundleDiscountCents(), 0);
+
+  if (state.reward) {
+    setCouponMessage("Remove the reward before applying a coupon.", "error");
+    return false;
+  }
 
   if (!code) {
     resetCoupon();
@@ -1401,6 +1583,13 @@ function updateProductQuantity(action, product) {
     setMessage();
   }
 
+  if (state.reward && !rewardEligibleInCart(state.reward.type)) {
+    const removedReward = rewardLabel(state.reward.type);
+    state.reward = null;
+    setRewardMessage(`${removedReward} was removed because the qualifying item left your cart.`, "error");
+  }
+  renderRewardOptions();
+
   updateSummary();
   renderProducts();
   syncPageFlow();
@@ -1422,8 +1611,19 @@ function updateSummary() {
   el.orderTotal.textContent = money(selectedTotalCents());
 }
 
-el.customerPhone.addEventListener("input", syncPhoneFormat);
+el.customerPhone.addEventListener("input", () => {
+  syncPhoneFormat();
+  if (state.rewardPhone && phoneDigits(el.customerPhone.value) !== state.rewardPhone) {
+    resetRewards("Phone number changed. View rewards again for the new number.");
+    refreshCheckoutReview();
+  }
+});
 el.customerPhone.addEventListener("blur", syncPhoneFormat);
+el.checkRewards.addEventListener("click", lookupCustomerRewards);
+el.rewardOptions.addEventListener("click", event => {
+  const button = event.target.closest("[data-checkout-reward]");
+  if (button) toggleCheckoutReward(button.dataset.checkoutReward);
+});
 document.querySelectorAll('input[name="fulfillment"]').forEach(input => {
   input.addEventListener("change", () => {
     updateShippingFields();
@@ -1661,6 +1861,12 @@ function renderCheckoutReview() {
             <span>-${money(discountCents())}</span>
           </div>
         ` : ""}
+        ${state.reward ? `
+          <div class="discount-line">
+            <span>${rewardLabel()}</span>
+            <span>-${money(rewardDiscountCents())}</span>
+          </div>
+        ` : ""}
         <div><span>Tax</span><span>${totals ? money(totals.tax_cents) : "Updates before order is placed"}</span></div>
         ${totals?.shipping_cents ? `
           <div><span>Shipping</span><span>${money(totals.shipping_cents)}</span></div>
@@ -1748,10 +1954,24 @@ async function submitReviewedOrder() {
     p_fulfillment_method: details.fulfillmentMethod,
     p_shipping_address: details.fulfillmentMethod === "shipping" ? details.shippingAddress : null,
     p_tip_cents: tipCents(),
+    p_reward_type: state.reward?.type || null,
     p_items: items
   };
 
+  const appliedReward = state.reward
+    ? { ...state.reward, discount_cents: rewardDiscountCents() }
+    : null;
+
   let { data, error } = await supabaseClient.rpc("place_order", orderPayload);
+
+  const databaseNeedsRewardUpgrade =
+    error?.code === "PGRST202" && error.message?.includes("p_reward_type");
+
+  if (databaseNeedsRewardUpgrade && !state.reward) {
+    const legacyPayload = { ...orderPayload };
+    delete legacyPayload.p_reward_type;
+    ({ data, error } = await supabaseClient.rpc("place_order", legacyPayload));
+  }
 
   const databaseNeedsTipUpgrade =
     error?.code === "PGRST202" && error.message?.includes("p_tip_cents");
@@ -1768,11 +1988,16 @@ async function submitReviewedOrder() {
   if (error) {
     console.error(error);
 
-    const message = databaseNeedsTipUpgrade && tipCents() > 0
+    const errorMessage = String(error.message || "");
+    const message = databaseNeedsRewardUpgrade && state.reward
+      ? "Rewards are temporarily unavailable. Please try again after the checkout update is complete."
+      : errorMessage.toLowerCase().includes("reward")
+        ? errorMessage
+      : databaseNeedsTipUpgrade && tipCents() > 0
       ? "Optional tips are temporarily unavailable. Please remove the tip and place your order again."
-      : error.message.includes("Not enough capacity")
+      : errorMessage.includes("Not enough capacity")
       ? "That pickup date filled up while you were ordering. Please choose another date or reduce your quantity."
-      : error.message.includes("Not enough inventory")
+      : errorMessage.includes("Not enough inventory")
         ? "One of those items just sold out. Please review your quantities and try again."
         : "Your order could not be submitted. Please check your details and try again.";
 
@@ -1783,7 +2008,16 @@ async function submitReviewedOrder() {
 
   const result = Array.isArray(data) ? data[0] : data;
   clearOrderDraft();
-  showSuccess(result, details.paymentMethod, invoiceRequested, selectedItemsWithDetails(), details, state.coupon, state.orderTotals);
+  showSuccess(
+    result,
+    details.paymentMethod,
+    invoiceRequested,
+    selectedItemsWithDetails(),
+    details,
+    state.coupon,
+    appliedReward,
+    state.orderTotals
+  );
   await refreshSelectedDate();
 }
 
@@ -1806,7 +2040,7 @@ async function refreshSelectedDate() {
   }
 }
 
-function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon, totals) {
+function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon, reward, totals) {
   const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
   const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
@@ -1831,6 +2065,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
       <div><dt>Order number</dt><dd>${result.order_code}</dd></div>
       <div><dt>Total</dt><dd>${money(result.total_cents)}</dd></div>
         ${coupon ? `<div><dt>Coupon</dt><dd>${coupon.code} (${couponAppliesToLabel(coupon.applies_to)}) -${money(coupon.discount_cents)}</dd></div>` : ""}
+        ${reward ? `<div><dt>Reward</dt><dd>${rewardLabel(reward.type)} -${money(reward.discount_cents)}</dd></div>` : ""}
         ${tipCents() ? `<div><dt>Tip</dt><dd>${money(tipCents())}</dd></div>` : ""}
         <div><dt>Payment</dt><dd data-payment-label></dd></div>
       <div><dt>Method</dt><dd>${fulfillmentSummary(details, items)}</dd></div>
@@ -1895,6 +2130,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
         ${bathBombBundleDiscountCents() ? `<div class="discount-line"><span>Bath bomb deal</span><span>-${money(bathBombBundleDiscountCents())}</span></div>` : ""}
         ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code} (${couponAppliesToLabel(coupon.applies_to)})</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
+        ${reward ? `<div class="discount-line"><span>${rewardLabel(reward.type)}</span><span>-${money(reward.discount_cents)}</span></div>` : ""}
         <div><span>Tax</span><span>${money(totals?.tax_cents || 0)}</span></div>
         ${totals?.shipping_cents ? `<div><span>Shipping</span><span>${money(totals.shipping_cents)}</span></div>` : ""}
         ${tipCents() ? `<div><span>Tip</span><span>${money(tipCents())}</span></div>` : ""}
@@ -1922,6 +2158,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
   el.invoiceRequested.checked = false;
   updateInvoiceEmailField();
   resetCoupon();
+  resetRewards();
   el.couponCode.value = "";
   el.tipAmount.value = "";
   state.quantities = {};
@@ -1938,6 +2175,7 @@ async function startAnotherOrder() {
   state.itemNotes = {};
   state.orderTotals = null;
   resetCoupon();
+  resetRewards();
   el.couponCode.value = "";
   el.tipAmount.value = "";
   clearOrderDraft();

@@ -9,7 +9,7 @@
   />
   <title>Jeni's Home Made Goods Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260917-soft-checkout-note" />
+  <link rel="stylesheet" href="styles.css?v=20260928-checkout-rewards" />
 </head>
 <body>
   <header class="site-header">
@@ -127,6 +127,18 @@
           </label>
         </div>
 
+        <section class="checkout-rewards" aria-labelledby="checkout-rewards-heading">
+          <div class="checkout-rewards-heading">
+            <div>
+              <strong id="checkout-rewards-heading">Rewards</strong>
+              <p>Use the phone number above to view earned bread and granola rewards. One reward may be used per order and cannot be combined with a coupon code.</p>
+            </div>
+            <button class="secondary-button compact-button" type="button" id="check-rewards">View rewards</button>
+          </div>
+          <p id="reward-message" class="message" role="status"></p>
+          <div id="reward-options" class="reward-options" hidden></div>
+        </section>
+
         <label>
           Questions/comments
           <textarea
@@ -240,6 +252,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260921-checkout-compatibility"></script>
+  <script src="app.js?v=20260928-checkout-rewards"></script>
 </body>
 </html>

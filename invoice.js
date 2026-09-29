@@ -123,6 +123,17 @@ function couponAppliesToLabel(value) {
   }[value] || "order";
 }
 
+function discountLabel(order) {
+  const details = [];
+  if (order.coupon_code) {
+    details.push(`coupon ${escapeHtml(order.coupon_code)} (${couponAppliesToLabel(order.coupon_applies_to)})`);
+  }
+  if (order.reward_type) {
+    details.push(order.reward_type === "bread" ? "bread reward" : "granola reward");
+  }
+  return details.length ? `Discounts, including ${details.join(" and ")}` : "Discount";
+}
+
 function renderInvoice(order) {
   const items = order.items || [];
   const isShipping = order.fulfillment_method === "shipping";
@@ -180,7 +191,7 @@ function renderInvoice(order) {
         <div><span>Subtotal</span><span>${money(order.subtotal_cents || order.total_cents)}</span></div>
         ${order.discount_cents ? `
           <div class="discount-line">
-            <span>${order.coupon_code ? `Discounts, including coupon ${escapeHtml(order.coupon_code)} (${couponAppliesToLabel(order.coupon_applies_to)})` : "Discount"}</span>
+            <span>${discountLabel(order)}</span>
             <span>-${money(order.discount_cents)}</span>
           </div>
         ` : ""}

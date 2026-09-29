@@ -556,9 +556,14 @@ function plainItemsText(order) {
 }
 
 function discountLabel(order) {
-  return order.coupon_code
-    ? `Coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)})`
-    : "Discount";
+  const details = [];
+  if (order.coupon_code) {
+    details.push(`coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)})`);
+  }
+  if (order.reward_type) {
+    details.push(order.reward_type === "bread" ? "bread reward" : "granola reward");
+  }
+  return details.length ? `Discounts, including ${details.join(" and ")}` : "Discount";
 }
 
 function ensureWebsiteSyncColumns(sheet) {
