@@ -330,6 +330,7 @@ el.rewardAdjustmentForm.addEventListener("submit", saveRewardAdjustment);
 el.clearRewardAdjustment.addEventListener("click", clearRewardAdjustmentForm);
 el.rewardSearch.addEventListener("input", renderRewards);
 el.rewardsList.addEventListener("click", handleRewardAction);
+el.rewardsList.addEventListener("submit", saveRewardPhone);
 el.taxSettingsForm.addEventListener("submit", saveTaxSettings);
 el.refreshCoupons.addEventListener("click", loadCoupons);
 el.couponTypeInput.addEventListener("change", syncCouponTypeFields);
@@ -558,7 +559,23 @@ function bathBombBundleDiscountCents(items) {
 }
 
 function manualDiscountForOrder(order) {
-  return Math.max(Number(order.discount_cents || 0) - bathBombBundleDiscountCents(order.items || []), 0);
+  return Math.max(
+    Number(order.discount_cents || 0)
+      - bathBombBundleDiscountCents(order.items || [])
+      - Number(order.reward_discount_cents || 0),
+    0
+  );
+}
+
+function orderDiscountLabel(order) {
+  const details = [];
+  if (order.coupon_code) {
+    details.push(`coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)})`);
+  }
+  if (order.reward_type) {
+    details.push(order.reward_type === "bread" ? "bread reward" : "granola reward");
+  }
+  return details.length ? `Discounts, including ${details.join(" and ")}` : "Discount";
 }
 
 function syncManualItemRow(row) {
@@ -884,7 +901,19 @@ function rewardCardMarkup(reward) {
       </div>
       <div class="reward-actions">
         <button class="secondary-button compact-button" type="button" data-reward-action="adjust">Add or correct credits</button>
+        <button class="secondary-button compact-button" type="button" data-reward-action="edit-phone">Edit phone number</button>
       </div>
+      <form class="reward-phone-editor" data-reward-phone-editor hidden>
+        <label>
+          New phone number
+          <input name="customer-phone" type="tel" autocomplete="tel" value="${escapeAttribute(formattedPhone(reward.customer_phone))}" placeholder="(000) 000-0000" required />
+        </label>
+        <div class="reward-phone-actions">
+          <button class="compact-button" type="submit">Save phone</button>
+          <button class="secondary-button compact-button" type="button" data-reward-action="cancel-phone">Cancel</button>
+        </div>
+        <p class="message reward-phone-message" data-reward-phone-message role="status"></p>
+      </form>
     </article>
   `;
 }
@@ -933,6 +962,20 @@ async function handleRewardAction(event) {
   if (!button) return;
 
   const card = button.closest("[data-reward-phone]");
+  if (button.dataset.rewardAction === "edit-phone") {
+    const editor = card.querySelector("[data-reward-phone-editor]");
+    editor.hidden = false;
+    const input = editor.elements.namedItem("customer-phone");
+    input.value = formattedPhone(card.dataset.rewardPhone || "");
+    input.focus();
+    return;
+  }
+
+  if (button.dataset.rewardAction === "cancel-phone") {
+    button.closest("[data-reward-phone-editor]").hidden = true;
+    return;
+  }
+
   if (button.dataset.rewardAction === "adjust") {
     fillRewardAdjustmentForm(card);
     return;
@@ -950,6 +993,62 @@ async function handleRewardAction(event) {
     granolaDelta: type === "granola" ? -10 : 0,
     note: `Redeemed ${rewardName}`
   });
+}
+
+async function saveRewardPhone(event) {
+  const form = event.target.closest("[data-reward-phone-editor]");
+  if (!form) return;
+  event.preventDefault();
+
+  const card = form.closest("[data-reward-phone]");
+  const input = form.elements.namedItem("customer-phone");
+  const message = form.querySelector("[data-reward-phone-message]");
+  const submitButton = form.querySelector("button[type='submit']");
+  const oldPhone = card.dataset.rewardPhone || "";
+  const newPhone = input.value.trim();
+  const normalizedNewPhone = normalizedPhone(newPhone);
+
+  if (!/^\d{10}$/.test(normalizedNewPhone)) {
+    setMessage(message, "Enter a valid 10-digit phone number.", "error");
+    input.focus();
+    return;
+  }
+
+  if (normalizedNewPhone === normalizedPhone(oldPhone)) {
+    setMessage(message, "Enter a different phone number.", "error");
+    input.focus();
+    return;
+  }
+
+  const customerName = card.dataset.rewardName || "this customer";
+  const confirmed = window.confirm(
+    `Change ${customerName}'s phone from ${formattedPhone(oldPhone)} to ${formattedPhone(newPhone)}? `
+      + "All matching orders and reward credits will move to the new number."
+  );
+  if (!confirmed) return;
+
+  submitButton.disabled = true;
+  setMessage(message, "Updating phone number...");
+
+  const { data, error } = await supabaseClient.rpc("admin_update_reward_phone", {
+    p_old_phone: oldPhone,
+    p_new_phone: newPhone
+  });
+
+  if (error) {
+    submitButton.disabled = false;
+    setMessage(message, error.message, "error");
+    return;
+  }
+
+  const result = data?.[0] || {};
+  await Promise.all([loadRewards(), loadOrders()]);
+  setMessage(
+    el.rewardAdminMessage,
+    `Phone number updated on ${Number(result.orders_updated || 0)} order${Number(result.orders_updated || 0) === 1 ? "" : "s"}`
+      + ` and ${Number(result.adjustments_updated || 0)} reward adjustment${Number(result.adjustments_updated || 0) === 1 ? "" : "s"}.`,
+    "success"
+  );
 }
 
 async function saveRewardAdjustment(event) {
@@ -1397,7 +1496,7 @@ function orderCardMarkup(order) {
         <div><dt>Method</dt><dd>${fulfillmentLabel(order.fulfillment_method)}</dd></div>
         <div><dt>Receipt email</dt><dd>${invoiceStatusLabel(order)}</dd></div>
         <div><dt>Loaf spots</dt><dd>${order.total_loaves}</dd></div>
-        ${order.discount_cents ? `<div><dt>Discount</dt><dd>${order.coupon_code ? `Discounts, including coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)}) ` : ""}-${money(order.discount_cents)}</dd></div>` : ""}
+        ${order.discount_cents ? `<div><dt>Discount</dt><dd>${orderDiscountLabel(order)} -${money(order.discount_cents)}</dd></div>` : ""}
         ${order.tip_cents ? `<div><dt>Tip</dt><dd>${money(order.tip_cents)}</dd></div>` : ""}
         <div><dt>Tax</dt><dd>${money(order.tax_cents || 0)}</dd></div>
         ${order.shipping_cents ? `<div><dt>Shipping</dt><dd>${money(order.shipping_cents)}</dd></div>` : ""}

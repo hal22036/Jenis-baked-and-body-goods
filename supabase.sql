@@ -77,6 +77,8 @@ create table if not exists public.orders (
   shipping_cents integer not null default 0 check (shipping_cents >= 0),
   coupon_code text references public.coupons(code),
   coupon_applies_to text,
+  reward_type text,
+  reward_discount_cents integer not null default 0,
   total_cents integer not null default 0,
   total_loaves integer not null check (total_loaves >= 0),
   fulfillment_method text not null default 'pickup' check (fulfillment_method in ('pickup','shipping')),
@@ -297,6 +299,12 @@ alter table public.orders
 add column if not exists shipping_address text;
 
 alter table public.orders
+add column if not exists reward_type text;
+
+alter table public.orders
+add column if not exists reward_discount_cents integer not null default 0;
+
+alter table public.orders
 drop constraint if exists orders_coupon_code_fkey;
 
 alter table public.orders
@@ -412,6 +420,23 @@ drop constraint if exists orders_coupon_applies_to_check;
 alter table public.orders
 add constraint orders_coupon_applies_to_check
 check (coupon_applies_to is null or coupon_applies_to in ('items','shipping','order'));
+
+alter table public.orders
+drop constraint if exists orders_reward_type_check;
+
+alter table public.orders
+add constraint orders_reward_type_check
+check (reward_type is null or reward_type in ('bread','granola'));
+
+alter table public.orders
+drop constraint if exists orders_reward_discount_cents_check;
+
+alter table public.orders
+add constraint orders_reward_discount_cents_check
+check (
+  reward_discount_cents >= 0
+  and reward_discount_cents <= discount_cents
+);
 
 alter table public.orders
 drop constraint if exists orders_fulfillment_method_check;
@@ -591,6 +616,7 @@ drop function if exists public.place_order(uuid,text,text,text,text,text,boolean
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,jsonb);
 drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,jsonb);
+drop function if exists public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,text,jsonb);
 drop function if exists public.validate_coupon_code(text,integer);
 drop function if exists public.validate_coupon_code(text,integer,text);
 drop function if exists public.calculate_order_totals(integer,integer,text);
@@ -630,7 +656,9 @@ drop function if exists public.admin_save_coupon(text,text,text,text,integer,int
 drop function if exists public.admin_save_coupon(text,text,text,text,text,integer,integer,integer,date,date,integer,boolean);
 drop function if exists public.admin_remove_coupon(text);
 drop function if exists public.admin_adjust_rewards(text,text,integer,integer,text);
+drop function if exists public.admin_update_reward_phone(text,text);
 drop function if exists public.admin_list_rewards();
+drop function if exists public.get_customer_rewards(text);
 drop function if exists public.normalize_customer_phone(text);
 
 create or replace function public.validate_coupon_code(
@@ -915,6 +943,7 @@ create or replace function public.place_order(
   p_fulfillment_method text,
   p_shipping_address text,
   p_tip_cents integer,
+  p_reward_type text,
   p_items jsonb
 )
 returns table(order_id uuid, order_code text, total_cents integer)
@@ -949,6 +978,10 @@ declare
   v_fulfillment_method text;
   v_shipping_address text;
   v_tip integer;
+  v_phone text;
+  v_reward_type text;
+  v_reward_discount integer := 0;
+  v_reward_status record;
 begin
   if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
@@ -961,6 +994,13 @@ begin
 
   if length(regexp_replace(p_customer_phone, '\D', '', 'g')) <> 10 then
     raise exception 'A 10-digit phone number is required';
+  end if;
+
+  v_phone := regexp_replace(p_customer_phone, '\D', '', 'g');
+  v_reward_type := lower(nullif(trim(coalesce(p_reward_type, '')), ''));
+
+  if v_reward_type is not null and v_reward_type not in ('bread', 'granola') then
+    raise exception 'Invalid reward selection';
   end if;
 
   if coalesce(p_invoice_requested, false)
@@ -1067,6 +1107,55 @@ begin
   v_bundle_discount := public.bath_bomb_bundle_discount(p_items);
   v_discount := v_bundle_discount;
 
+  if v_reward_type is not null and v_coupon_code <> '' then
+    raise exception 'Rewards cannot be combined with a coupon code';
+  end if;
+
+  if v_reward_type is not null then
+    perform pg_advisory_xact_lock(hashtext('customer-reward:' || v_phone));
+
+    select *
+    into v_reward_status
+    from public.get_customer_rewards(v_phone);
+
+    if v_reward_type = 'bread' then
+      if coalesce(v_reward_status.bread_rewards_available, 0) < 1 then
+        raise exception 'A bread reward is no longer available for this phone number';
+      end if;
+
+      select max(p.price_cents)
+      into v_reward_discount
+      from jsonb_array_elements(p_items) item
+      join public.products p on p.id = (item->>'product_id')::uuid
+      where lower(trim(p.name)) = 'classic white'
+        and (item->>'quantity')::integer > 0;
+
+      if coalesce(v_reward_discount, 0) <= 0 then
+        raise exception 'Add a Classic White loaf to use a bread reward';
+      end if;
+    else
+      select least(
+        1200,
+        coalesce(sum(p.price_cents * (item->>'quantity')::integer), 0)::integer
+      )
+      into v_reward_discount
+      from jsonb_array_elements(p_items) item
+      join public.products p on p.id = (item->>'product_id')::uuid
+      where (
+        lower(trim(coalesce(p.display_group, ''))) = 'homemade granola'
+        or lower(trim(p.name)) like '%granola%'
+        or lower(trim(p.name)) like 'toasted coconut almond%'
+      )
+        and (item->>'quantity')::integer > 0;
+
+      if coalesce(v_reward_discount, 0) <= 0 then
+        raise exception 'Add a granola bag to use a granola reward';
+      end if;
+    end if;
+
+    v_discount := v_discount + v_reward_discount;
+  end if;
+
   if v_coupon_code <> '' then
     select *
     into v_coupon
@@ -1083,7 +1172,7 @@ begin
     v_coupon_code := null;
   end if;
 
-  if v_bundle_discount > 0 then
+  if v_bundle_discount > 0 or v_reward_discount > 0 then
     v_coupon_applies_to := 'items';
   end if;
 
@@ -1112,6 +1201,8 @@ begin
     invoice_requested,
     coupon_code,
     coupon_applies_to,
+    reward_type,
+    reward_discount_cents,
     subtotal_cents,
     discount_cents,
     tip_cents,
@@ -1132,6 +1223,8 @@ begin
     coalesce(p_invoice_requested, false),
     v_coupon_code,
     v_coupon_applies_to,
+    v_reward_type,
+    v_reward_discount,
     v_total,
     v_discount,
     v_tip,
@@ -1225,6 +1318,8 @@ returns table(
   invoice_requested boolean,
   coupon_code text,
   coupon_applies_to text,
+  reward_type text,
+  reward_discount_cents integer,
   subtotal_cents integer,
   discount_cents integer,
   tip_cents integer,
@@ -1254,6 +1349,8 @@ begin
     o.invoice_requested,
     o.coupon_code,
     o.coupon_applies_to,
+    o.reward_type,
+    o.reward_discount_cents,
     o.subtotal_cents,
     o.discount_cents,
     o.tip_cents,
@@ -1307,6 +1404,8 @@ returns table(
   invoice_sent boolean,
   coupon_code text,
   coupon_applies_to text,
+  reward_type text,
+  reward_discount_cents integer,
   subtotal_cents integer,
   discount_cents integer,
   tip_cents integer,
@@ -1349,6 +1448,8 @@ begin
     o.invoice_sent,
     o.coupon_code,
     o.coupon_applies_to,
+    o.reward_type,
+    o.reward_discount_cents,
     o.subtotal_cents,
     o.discount_cents,
     o.tip_cents,
@@ -1443,6 +1544,8 @@ returns table(
   invoice_sent boolean,
   coupon_code text,
   coupon_applies_to text,
+  reward_type text,
+  reward_discount_cents integer,
   subtotal_cents integer,
   discount_cents integer,
   tip_cents integer,
@@ -1482,6 +1585,8 @@ begin
     o.invoice_sent,
     o.coupon_code,
     o.coupon_applies_to,
+    o.reward_type,
+    o.reward_discount_cents,
     o.subtotal_cents,
     o.discount_cents,
     o.tip_cents,
@@ -1694,6 +1799,7 @@ begin
     o.id,
     o.pickup_date_id,
     o.coupon_applies_to,
+    o.reward_discount_cents,
     o.fulfillment_method,
     o.fulfillment_status
   into v_order
@@ -1773,7 +1879,7 @@ begin
   end if;
 
   v_bundle_discount := public.bath_bomb_bundle_discount(p_items);
-  v_discount := v_discount + v_bundle_discount;
+  v_discount := v_discount + v_bundle_discount + coalesce(v_order.reward_discount_cents, 0);
 
   if v_discount > v_subtotal then
     raise exception 'Discount cannot be more than the item subtotal';
@@ -2326,6 +2432,89 @@ as $$
   from cleaned;
 $$;
 
+create or replace function public.get_customer_rewards(p_customer_phone text)
+returns table(
+  bread_total bigint,
+  granola_total bigint,
+  bread_rewards_available bigint,
+  granola_rewards_available bigint,
+  bread_progress integer,
+  granola_progress integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with customer_phone as (
+    select public.normalize_customer_phone(p_customer_phone) as phone_key
+  ),
+  eligible_orders as (
+    select o.id
+    from public.orders o
+    cross join customer_phone cp
+    where o.payment_status = 'paid'
+      and o.fulfillment_status <> 'canceled'
+      and public.normalize_customer_phone(o.customer_phone) = cp.phone_key
+      and cp.phone_key ~ '^[0-9]{10}$'
+  ),
+  purchases as (
+    select
+      coalesce(sum(
+        case
+          when coalesce(p.capacity_units, oi.custom_capacity_units, 0) > 0
+            then oi.quantity * coalesce(p.capacity_units, oi.custom_capacity_units, 0)
+          else 0
+        end
+      ), 0)::bigint as bread_purchases,
+      coalesce(sum(
+        case
+          when lower(trim(coalesce(p.display_group, ''))) = 'homemade granola'
+            or lower(trim(coalesce(p.name, oi.custom_name, ''))) like '%granola%'
+            or lower(trim(coalesce(p.name, oi.custom_name, ''))) like 'toasted coconut almond%'
+            then oi.quantity
+          else 0
+        end
+      ), 0)::bigint as granola_purchases
+    from eligible_orders eo
+    join public.order_items oi on oi.order_id = eo.id
+    left join public.products p on p.id = oi.product_id
+  ),
+  adjustments as (
+    select
+      coalesce(sum(ra.bread_delta), 0)::bigint as bread_adjustments,
+      coalesce(sum(ra.granola_delta), 0)::bigint as granola_adjustments
+    from public.reward_adjustments ra
+    cross join customer_phone cp
+    where ra.phone_key = cp.phone_key
+  ),
+  redemptions as (
+    select
+      count(*) filter (where o.reward_type = 'bread')::bigint * 10 as bread_redeemed,
+      count(*) filter (where o.reward_type = 'granola')::bigint * 10 as granola_redeemed
+    from public.orders o
+    cross join customer_phone cp
+    where o.fulfillment_status <> 'canceled'
+      and public.normalize_customer_phone(o.customer_phone) = cp.phone_key
+  ),
+  totals as (
+    select
+      greatest(p.bread_purchases + a.bread_adjustments - r.bread_redeemed, 0)::bigint as bread_total,
+      greatest(p.granola_purchases + a.granola_adjustments - r.granola_redeemed, 0)::bigint as granola_total
+    from purchases p
+    cross join adjustments a
+    cross join redemptions r
+  )
+  select
+    t.bread_total,
+    t.granola_total,
+    (t.bread_total / 10)::bigint,
+    (t.granola_total / 10)::bigint,
+    mod(t.bread_total, 10)::integer,
+    mod(t.granola_total, 10)::integer
+  from totals t;
+$$;
+
 create or replace function public.admin_list_rewards()
 returns table(
   phone_key text,
@@ -2397,6 +2586,7 @@ begin
         case
           when lower(trim(coalesce(p.display_group, ''))) = 'homemade granola'
             or lower(trim(coalesce(p.name, oi.custom_name, ''))) like '%granola%'
+            or lower(trim(coalesce(p.name, oi.custom_name, ''))) like 'toasted coconut almond%'
             then oi.quantity
           else 0
         end
@@ -2414,6 +2604,17 @@ begin
     from public.reward_adjustments ra
     group by ra.phone_key
   ),
+  redemption_summary as (
+    select
+      public.normalize_customer_phone(o.customer_phone) as phone_key,
+      count(*) filter (where o.reward_type = 'bread')::bigint * 10 as bread_redeemed,
+      count(*) filter (where o.reward_type = 'granola')::bigint * 10 as granola_redeemed
+    from public.orders o
+    where o.fulfillment_status <> 'canceled'
+      and o.reward_type is not null
+      and public.normalize_customer_phone(o.customer_phone) ~ '^[0-9]{10}$'
+    group by public.normalize_customer_phone(o.customer_phone)
+  ),
   latest_adjustment_customer as (
     select distinct on (ra.phone_key)
       ra.phone_key,
@@ -2426,6 +2627,8 @@ begin
     select os.phone_key from order_summary os
     union
     select a.phone_key from adjustment_summary a
+    union
+    select r.phone_key from redemption_summary r
   ),
   reward_totals as (
     select
@@ -2438,12 +2641,19 @@ begin
       coalesce(i.granola_purchases, 0)::bigint as granola_purchases,
       coalesce(a.bread_adjustments, 0)::bigint as bread_adjustments,
       coalesce(a.granola_adjustments, 0)::bigint as granola_adjustments,
-      greatest(coalesce(i.bread_purchases, 0) + coalesce(a.bread_adjustments, 0), 0)::bigint as bread_total,
-      greatest(coalesce(i.granola_purchases, 0) + coalesce(a.granola_adjustments, 0), 0)::bigint as granola_total
+      greatest(
+        coalesce(i.bread_purchases, 0) + coalesce(a.bread_adjustments, 0) - coalesce(r.bread_redeemed, 0),
+        0
+      )::bigint as bread_total,
+      greatest(
+        coalesce(i.granola_purchases, 0) + coalesce(a.granola_adjustments, 0) - coalesce(r.granola_redeemed, 0),
+        0
+      )::bigint as granola_total
     from reward_customers rc
     left join order_summary os on os.phone_key = rc.phone_key
     left join item_summary i on i.phone_key = rc.phone_key
     left join adjustment_summary a on a.phone_key = rc.phone_key
+    left join redemption_summary r on r.phone_key = rc.phone_key
     left join latest_order_customer loc on loc.phone_key = rc.phone_key
     left join latest_adjustment_customer lac on lac.phone_key = rc.phone_key
   )
@@ -2530,6 +2740,49 @@ begin
   select *
   from public.admin_list_rewards() r
   where r.phone_key = v_phone;
+end;
+$$;
+
+create or replace function public.admin_update_reward_phone(
+  p_old_phone text,
+  p_new_phone text
+)
+returns table(orders_updated integer, adjustments_updated integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_old_phone text := public.normalize_customer_phone(p_old_phone);
+  v_new_phone text := public.normalize_customer_phone(p_new_phone);
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  if v_old_phone !~ '^[0-9]{10}$' or v_new_phone !~ '^[0-9]{10}$' then
+    raise exception 'Enter valid 10-digit phone numbers';
+  end if;
+
+  if v_old_phone = v_new_phone then
+    raise exception 'Enter a different phone number';
+  end if;
+
+  update public.orders as o
+  set customer_phone = v_new_phone
+  where public.normalize_customer_phone(o.customer_phone) = v_old_phone;
+  get diagnostics orders_updated = row_count;
+
+  update public.reward_adjustments as ra
+  set phone_key = v_new_phone
+  where ra.phone_key = v_old_phone;
+  get diagnostics adjustments_updated = row_count;
+
+  if orders_updated = 0 and adjustments_updated = 0 then
+    raise exception 'No orders or reward adjustments found for that phone number';
+  end if;
+
+  return next;
 end;
 $$;
 
@@ -2869,8 +3122,8 @@ begin
 end;
 $$;
 
-revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,jsonb) from public;
-grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,jsonb) to anon, authenticated;
+revoke all on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,text,jsonb) from public;
+grant execute on function public.place_order(uuid,text,text,text,text,text,boolean,text,text,text,integer,text,jsonb) to anon, authenticated;
 
 revoke all on function public.validate_coupon_code(text,integer,text) from public;
 grant execute on function public.validate_coupon_code(text,integer,text) to anon, authenticated;
@@ -2936,11 +3189,17 @@ grant execute on function public.admin_set_product_archived(uuid,boolean) to aut
 
 revoke all on function public.normalize_customer_phone(text) from public;
 
+revoke all on function public.get_customer_rewards(text) from public;
+grant execute on function public.get_customer_rewards(text) to anon, authenticated;
+
 revoke all on function public.admin_list_rewards() from public;
 grant execute on function public.admin_list_rewards() to authenticated;
 
 revoke all on function public.admin_adjust_rewards(text,text,integer,integer,text) from public;
 grant execute on function public.admin_adjust_rewards(text,text,integer,integer,text) to authenticated;
+
+revoke all on function public.admin_update_reward_phone(text,text) from public;
+grant execute on function public.admin_update_reward_phone(text,text) to authenticated;
 
 revoke all on function public.admin_get_tax_settings() from public;
 grant execute on function public.admin_get_tax_settings() to authenticated;

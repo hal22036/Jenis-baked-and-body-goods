@@ -161,7 +161,8 @@
 }
 
 .reward-adjustment-actions,
-.reward-actions {
+.reward-actions,
+.reward-phone-actions {
   display: flex;
   gap: 10px;
 }
@@ -193,6 +194,25 @@
 .reward-card-heading h3 {
   margin: 0 0 4px;
   color: var(--accent-dark);
+}
+
+.reward-phone-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.reward-phone-editor[hidden] {
+  display: none;
+}
+
+.reward-phone-message {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .reward-customer-totals {
@@ -1161,7 +1181,8 @@
   }
 
   .reward-adjustment-form,
-  .reward-progress-grid {
+  .reward-progress-grid,
+  .reward-phone-editor {
     grid-template-columns: 1fr;
   }
 
@@ -1179,8 +1200,14 @@
     justify-items: start;
   }
 
-  .reward-adjustment-actions {
+  .reward-adjustment-actions,
+  .reward-actions,
+  .reward-phone-actions {
     display: grid;
+  }
+
+  .reward-phone-message {
+    grid-column: auto;
   }
 
   .toolbar-actions,
