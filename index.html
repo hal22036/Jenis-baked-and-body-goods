@@ -9,7 +9,7 @@
   />
   <title>Jeni's Home Made Goods Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20260928-reward-layout" />
+  <link rel="stylesheet" href="styles.css?v=20260928-reward-banner" />
 </head>
 <body>
   <header class="site-header">
@@ -38,6 +38,23 @@
       </div>
 
       <div class="product-tabs" id="product-tabs" aria-label="Product sections"></div>
+      <aside class="rewards-promo" id="reward-banner" role="note" aria-label="Customer rewards program" hidden>
+        <div class="rewards-promo-heading">
+          <span>New rewards program</span>
+          <strong>Your favorites now earn rewards</strong>
+        </div>
+        <div class="rewards-promo-offers">
+          <p>
+            <strong>Buy 10 bread loaves</strong>
+            <span>Get 1 Classic White free</span>
+          </p>
+          <p>
+            <strong>Buy 10 granola bags</strong>
+            <span>Get $12 toward your next bag</span>
+          </p>
+        </div>
+        <p class="rewards-promo-note">Rewards are automatically linked to the phone number used at checkout.</p>
+      </aside>
       <section class="date-panel" id="date-section" aria-labelledby="dates-heading">
         <p class="order-cutoff-notice">
           <span>Orders close Wednesday at 5:00 PM Pacific</span>
@@ -252,6 +269,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260928-checkout-rewards"></script>
+  <script src="app.js?v=20260928-reward-banner"></script>
 </body>
 </html>

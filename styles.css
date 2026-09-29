@@ -177,6 +177,75 @@ h2 {
   color: #fff;
 }
 
+.rewards-promo {
+  margin: 0 0 20px;
+  overflow: hidden;
+  border: 1px solid #cda45b;
+  border-radius: 8px;
+  background: #fff8df;
+  box-shadow: 0 10px 24px rgba(74, 47, 24, 0.1);
+  color: var(--text);
+}
+
+.rewards-promo-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #52613c;
+  color: #fff;
+}
+
+.rewards-promo-heading span {
+  color: #ffe5a6;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rewards-promo-heading strong {
+  font-size: 1.05rem;
+  text-align: right;
+}
+
+.rewards-promo-offers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rewards-promo-offers p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 15px 18px;
+  text-align: center;
+}
+
+.rewards-promo-offers p + p {
+  border-left: 1px solid #d9c79e;
+}
+
+.rewards-promo-offers strong {
+  color: var(--accent-dark);
+  font-size: 1.05rem;
+}
+
+.rewards-promo-offers span {
+  font-weight: 800;
+}
+
+.rewards-promo-note {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid #d9c79e;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 .product-category {
   display: grid;
   gap: 12px;
@@ -1403,6 +1472,24 @@ button.review-place-button:hover,
   .product-tab {
     width: 100%;
     padding-inline: 10px;
+  }
+
+  .rewards-promo-heading {
+    display: grid;
+    gap: 4px;
+  }
+
+  .rewards-promo-heading strong {
+    text-align: left;
+  }
+
+  .rewards-promo-offers {
+    grid-template-columns: 1fr;
+  }
+
+  .rewards-promo-offers p + p {
+    border-top: 1px solid #d9c79e;
+    border-left: 0;
   }
 
   .fulfillment-grid {

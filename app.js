@@ -103,6 +103,7 @@ const el = {
   customerSection: document.querySelector("#customer-section"),
   productList: document.querySelector("#product-list"),
   productTabs: document.querySelector("#product-tabs"),
+  rewardBanner: document.querySelector("#reward-banner"),
   capacityMessage: document.querySelector("#capacity-message"),
   capacityPill: document.querySelector(".capacity-pill"),
   selectedCount: document.querySelector("#selected-count"),
@@ -1380,6 +1381,7 @@ function renderProductTabs() {
     el.productTabs.hidden = true;
     el.productTabs.innerHTML = "";
     if (tabs[0]) state.activeProductTab = tabs[0].id;
+    el.rewardBanner.hidden = state.activeProductTab !== "baked-goods";
     return;
   }
 
@@ -1388,6 +1390,7 @@ function renderProductTabs() {
   }
 
   el.productTabs.hidden = false;
+  el.rewardBanner.hidden = state.activeProductTab !== "baked-goods";
   el.productTabs.innerHTML = tabs.map(tab => `
     <button
       class="product-tab ${tab.id === state.activeProductTab ? "is-active" : ""}"
