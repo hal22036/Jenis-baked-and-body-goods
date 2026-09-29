@@ -783,7 +783,14 @@ legend {
 
 .checkout-rewards-heading button {
   flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
   margin: 0;
+}
+
+.checkout-rewards-heading > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .reward-options {
@@ -1418,6 +1425,7 @@ button.review-place-button:hover,
 
   .checkout-rewards-heading button {
     width: 100%;
+    min-width: 0;
   }
 
   .invoice-request-row {
