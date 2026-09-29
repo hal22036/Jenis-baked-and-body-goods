@@ -130,7 +130,8 @@ const el = {
   rewardGranolaDelta: document.querySelector("#reward-granola-delta"),
   rewardAdjustmentNote: document.querySelector("#reward-adjustment-note"),
   clearRewardAdjustment: document.querySelector("#clear-reward-adjustment"),
-  rewardSearch: document.querySelector("#reward-search")
+  rewardSearch: document.querySelector("#reward-search"),
+  rewardSort: document.querySelector("#reward-sort")
 };
 
 const adminPages = {
@@ -329,6 +330,7 @@ el.refreshRewards.addEventListener("click", loadRewards);
 el.rewardAdjustmentForm.addEventListener("submit", saveRewardAdjustment);
 el.clearRewardAdjustment.addEventListener("click", clearRewardAdjustmentForm);
 el.rewardSearch.addEventListener("input", renderRewards);
+el.rewardSort.addEventListener("change", renderRewards);
 el.rewardsList.addEventListener("click", handleRewardAction);
 el.rewardsList.addEventListener("submit", saveRewardPhone);
 el.taxSettingsForm.addEventListener("submit", saveTaxSettings);
@@ -865,7 +867,7 @@ function renderRewards() {
     if (!search) return true;
     return String(reward.customer_name || "").toLowerCase().includes(search)
       || (searchDigits && normalizedPhone(reward.customer_phone).includes(searchDigits));
-  });
+  }).sort(compareRewards);
 
   if (!rewards.length) {
     el.rewardsList.innerHTML = `<p class="muted">${state.rewards.length ? "No customers match that search." : "No reward activity yet."}</p>`;
@@ -875,6 +877,42 @@ function renderRewards() {
 
   el.rewardsList.innerHTML = rewards.map(reward => rewardCardMarkup(reward)).join("");
   setMessage(el.rewardAdminMessage, `${rewards.length} customer${rewards.length === 1 ? "" : "s"} shown.`, "success");
+}
+
+function rewardNameParts(name) {
+  const parts = String(name || "Customer").trim().split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] || "",
+    last: parts.length > 1 ? parts[parts.length - 1] : (parts[0] || "")
+  };
+}
+
+function compareRewardNames(a, b, lastNameFirst = false) {
+  const aName = rewardNameParts(a.customer_name);
+  const bName = rewardNameParts(b.customer_name);
+  const primary = lastNameFirst
+    ? compareText(aName.last, bName.last)
+    : compareText(aName.first, bName.first);
+  const secondary = lastNameFirst
+    ? compareText(aName.first, bName.first)
+    : compareText(aName.last, bName.last);
+  return primary || secondary || compareText(a.phone_key, b.phone_key);
+}
+
+function compareRewards(a, b) {
+  const sort = el.rewardSort.value;
+  if (sort === "first-name") return compareRewardNames(a, b);
+  if (sort === "last-name") return compareRewardNames(a, b, true);
+
+  const values = {
+    "bread-total": reward => Number(reward.bread_total || 0),
+    "granola-total": reward => Number(reward.granola_total || 0),
+    "rewards-available": reward => Number(reward.bread_rewards_available || 0) + Number(reward.granola_rewards_available || 0),
+    orders: reward => Number(reward.order_count || 0),
+    spent: reward => Number(reward.total_spent_cents || 0)
+  };
+  const valueFor = values[sort] || values["bread-total"];
+  return valueFor(b) - valueFor(a) || compareRewardNames(a, b, true);
 }
 
 function rewardCardMarkup(reward) {

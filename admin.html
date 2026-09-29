@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20260928-checkout-rewards" />
+  <link rel="stylesheet" href="admin.css?v=20260928-reward-sorting" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -307,6 +307,18 @@
           Find customer
           <input id="reward-search" type="search" placeholder="Search name or phone" />
         </label>
+        <label>
+          Sort rewards
+          <select id="reward-sort">
+            <option value="last-name">Last name A-Z</option>
+            <option value="first-name">First name A-Z</option>
+            <option value="bread-total">Bread loaves: highest first</option>
+            <option value="granola-total">Granola bags: highest first</option>
+            <option value="rewards-available">Available rewards: highest first</option>
+            <option value="orders">Paid orders: highest first</option>
+            <option value="spent">Amount spent: highest first</option>
+          </select>
+        </label>
       </div>
       <p id="reward-admin-message" class="message" role="status"></p>
       <div id="rewards-list" class="rewards-list"></div>
@@ -450,6 +462,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20260928-checkout-rewards"></script>
+  <script src="admin.js?v=20260928-reward-sorting"></script>
 </body>
 </html>

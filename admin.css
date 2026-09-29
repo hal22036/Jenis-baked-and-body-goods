@@ -172,7 +172,10 @@
 }
 
 .reward-tools {
-  max-width: 420px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  max-width: 760px;
+  gap: 12px;
   margin: 16px 0;
 }
 
@@ -1182,6 +1185,7 @@
 
   .reward-adjustment-form,
   .reward-progress-grid,
+  .reward-tools,
   .reward-phone-editor {
     grid-template-columns: 1fr;
   }
