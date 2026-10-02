@@ -66,25 +66,24 @@ update public.products
 set description = E'Ingredients: Bread Flour (Bleached Wheat Flour, Malted Barley Flour, Niacin, Reduced Iron, Thiamine Mononitrate, Riboflavin, Folic Acid), Water, Sourdough Starter (Bread Flour, Water), Pepperoni, Mozzarella Cheese, Pepper Jack Cheese, Parmesan Cheese, Olive or Avocado Oil, Italian Seasoning, Garlic Powder, Salt.\nContains: Wheat, Milk.'
 where lower(trim(name)) = 'pepperoni pizza';
 
-create temporary table jbg_new_loaves (
-  name text primary key,
-  description text not null,
-  price_cents integer not null,
-  capacity_units integer not null,
-  category text not null,
-  display_group text,
-  option_label text,
-  image_url text,
-  shippable boolean not null,
-  tax_category text not null,
-  track_inventory boolean not null,
-  inventory_quantity integer not null,
-  active boolean not null,
-  archived boolean not null,
-  sort_order integer not null
-) on commit drop;
-
-insert into jbg_new_loaves values
+with jbg_new_loaves (
+  name,
+  description,
+  price_cents,
+  capacity_units,
+  category,
+  display_group,
+  option_label,
+  image_url,
+  shippable,
+  tax_category,
+  track_inventory,
+  inventory_quantity,
+  active,
+  archived,
+  sort_order
+) as (
+values
   (
     'Raspberry White Chocolate',
     E'Ingredients: Bread Flour (Bleached Wheat Flour, Malted Barley Flour, Niacin, Reduced Iron, Thiamine Mononitrate, Riboflavin, Folic Acid), Water, Sourdough Starter (Bread Flour, Water), White Chocolate Chips, Raspberries, Brown Sugar, Olive or Avocado Oil, Vanilla Extract, Raspberry Oil, Salt.\nContains: Wheat, Milk, Soy.',
@@ -93,7 +92,7 @@ insert into jbg_new_loaves values
   (
     'Light Banana Sourdough',
     E'Ingredients: Bread Flour (Bleached Wheat Flour, Malted Barley Flour, Niacin, Reduced Iron, Thiamine Mononitrate, Riboflavin, Folic Acid), Water, Sourdough Starter (Bread Flour, Water), Banana, Brown Sugar, Olive or Avocado Oil, Vanilla Extract, Banana Extract, Cinnamon, Salt.\nContains: Wheat.',
-    1200, 1, 'Sweet', 'Banana Sourdough', 'Plain', 'assets/banana.png', false, 'home_bakery', false, 0, true, false, 1
+    1200, 1, 'Sweet', null, null, 'assets/banana.png', false, 'home_bakery', false, 0, true, false, 9
   ),
   (
     'Banana White Chocolate',
@@ -139,7 +138,9 @@ insert into jbg_new_loaves values
     'Pumpkin Spice Streusel',
     E'Ingredients: Bread Flour (Bleached Wheat Flour, Malted Barley Flour, Niacin, Reduced Iron, Thiamine Mononitrate, Riboflavin, Folic Acid), Water, Sourdough Starter (Bread Flour, Water), Pumpkin Puree, Brown Sugar, Butter, Maple Syrup, Olive or Avocado Oil, Pumpkin Pie Spice, Cinnamon, Vanilla Extract, Salt.\nContains: Wheat, Milk.',
     1500, 1, 'Sweet', null, null, 'assets/pumpkin_spice.png', false, 'home_bakery', false, 0, true, false, 13
-  );
+  )
+),
+updated as (
 
 -- Refresh matching rows first so rerunning this script also applies future
 -- description, price, grouping, or image corrections.
@@ -160,7 +161,9 @@ set
   archived = c.archived,
   sort_order = c.sort_order
 from jbg_new_loaves as c
-where lower(trim(p.name)) = lower(c.name);
+where lower(trim(p.name)) = lower(c.name)
+returning p.id
+)
 
 insert into public.products (
   name,
@@ -204,8 +207,9 @@ where not exists (
 
 commit;
 
--- Verification query: this should return 11 new product rows. Banana and
--- pumpkin variants should share their display_group values.
+-- Verification query: this should return 11 new product rows. Light Banana
+-- Sourdough should be standalone; the flavored banana and pumpkin variants
+-- should share their respective display_group values.
 select
   name,
   price_cents,
