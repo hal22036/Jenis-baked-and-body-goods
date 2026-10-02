@@ -624,6 +624,24 @@ function cardSubtotalCents(products) {
   return products.reduce((sum, product) => sum + itemSubtotalCents(product), 0);
 }
 
+function productDescriptionMarkup(description, className = "product-description") {
+  const text = cleanText(description);
+  return text ? `<p class="${className}">${escapeHtml(text)}</p>` : "";
+}
+
+function optionDescriptionMarkup(description) {
+  const text = cleanText(description);
+
+  if (!text) return "";
+
+  return `
+    <details class="option-description">
+      <summary>Ingredients &amp; allergens</summary>
+      <p>${escapeHtml(text)}</p>
+    </details>
+  `;
+}
+
 function remainingFor(date) {
   if (!date) return 0;
   return Math.max(date.capacity - date.ordered_count, 0);
@@ -1430,7 +1448,7 @@ function renderProductCard(products) {
         <span class="shipping-badge ${productIsShippable(primaryProduct) ? "can-ship" : "pickup-only"}">
           ${productIsShippable(primaryProduct) ? "Can ship" : "Pickup only"}
         </span>
-        <p>${primaryProduct.description || ""}</p>
+        ${productDescriptionMarkup(primaryProduct.description)}
       </div>
       <div class="product-bottom">
         <div>
@@ -1454,7 +1472,6 @@ function renderProductCard(products) {
           <span class="shipping-badge ${sortedProducts.some(product => productIsShippable(product)) ? "can-ship" : "pickup-only"}">
             ${sortedProducts.every(product => productIsShippable(product)) ? "Can ship" : sortedProducts.some(product => productIsShippable(product)) ? "Some options can ship" : "Pickup only"}
           </span>
-          <p>${primaryProduct.description || ""}</p>
         </div>
         <div class="group-subtotal">
           <span>Item subtotal</span>
@@ -1473,7 +1490,10 @@ function renderProductCard(products) {
         </div>
         ${sortedProducts.map(product => `
           <div class="option-row">
-            <strong>${optionLabelFor(product)}</strong>
+            <div class="option-copy">
+              <strong>${optionLabelFor(product)}</strong>
+              ${optionDescriptionMarkup(product.description)}
+            </div>
             <div class="option-controls">
               <div class="quantity" aria-label="${displayNameFor(product)} quantity">
                 <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one ${displayNameFor(product)}">-</button>

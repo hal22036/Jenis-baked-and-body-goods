@@ -101,6 +101,12 @@ In Supabase, open Table Editor -> `products`.
 
 The SQL setup file does not auto-create products, so rerunning it will not bring back starter menu items.
 
+For the October 2026 loaf catalog update, run
+`supabase-product-catalog-update.sql` in the Supabase SQL Editor after
+`supabase.sql`. It adds the seasonal loaves, groups banana and pumpkin flavor
+choices into shared storefront cards, and corrects existing bread ingredient
+and allergen descriptions. The catalog update is idempotent and can be rerun.
+
 Edit:
 
 - `name`

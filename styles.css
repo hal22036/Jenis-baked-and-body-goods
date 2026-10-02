@@ -498,6 +498,33 @@ h2 {
   border-top: 1px solid var(--border);
 }
 
+.product-description,
+.option-description p {
+  white-space: pre-line;
+}
+
+.option-copy {
+  min-width: 0;
+}
+
+.option-description {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.option-description summary {
+  width: fit-content;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.option-description p {
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
 .item-note-field {
   display: grid;
   grid-column: 1 / -1;
