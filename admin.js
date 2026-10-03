@@ -2419,8 +2419,26 @@ function renderProducts() {
             ` : `
             <details class="product-label-editor">
               <summary>
-                Ingredient label
-                <span>${productLabelStatus(product)}</span>
+                <span class="product-label-summary-copy">
+                  Ingredient label
+                  <small class="product-label-status">${productLabelStatus(product)}</small>
+                </span>
+                <span class="product-label-quick-actions">
+                  <button
+                    class="secondary-button compact-button"
+                    type="button"
+                    data-print-product-label
+                    data-product-label-quick-size="full"
+                  >${Number(product.capacity_units || 0) > 0 ? "Print full loaf" : "Print full-size"}</button>
+                  ${Number(product.capacity_units || 0) > 0 ? `
+                    <button
+                      class="secondary-button compact-button"
+                      type="button"
+                      data-print-product-label
+                      data-product-label-quick-size="mini"
+                    >Print mini</button>
+                  ` : ""}
+                </span>
               </summary>
               <div class="product-label-fields">
                 <label class="product-label-ingredients-field">
@@ -2520,11 +2538,20 @@ async function saveProductLabel(event) {
 
 function printProductIngredientLabel(event) {
   const button = event.currentTarget;
+  const quickPrintSize = button.dataset.productLabelQuickSize;
+
+  if (quickPrintSize) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   const row = button.closest("[data-product-id]");
   const product = state.products.find(item => item.id === row.dataset.productId);
   const ingredients = row.querySelector("[data-product-label-ingredients]").value.trim();
-  const printSize = row.querySelector("[data-product-label-print-size]").value;
-  const copies = Math.min(100, Math.max(1, Math.floor(Number(row.querySelector("[data-product-label-copies]").value) || 1)));
+  const printSize = quickPrintSize || row.querySelector("[data-product-label-print-size]").value;
+  const copies = quickPrintSize
+    ? 1
+    : Math.min(100, Math.max(1, Math.floor(Number(row.querySelector("[data-product-label-copies]").value) || 1)));
   const netWeight = printSize === "mini"
     ? row.querySelector("[data-product-label-mini-net-weight]").value.trim()
     : row.querySelector("[data-product-label-net-weight]").value.trim();

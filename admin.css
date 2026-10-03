@@ -1067,15 +1067,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   color: var(--accent-dark);
   font-weight: 900;
   cursor: pointer;
 }
 
-.product-label-editor summary span {
+.product-label-summary-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.product-label-status {
   color: var(--muted);
   font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.product-label-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-label-editor[open] .product-label-quick-actions {
+  display: none;
 }
 
 .product-label-fields {
