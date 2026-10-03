@@ -12,6 +12,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Jeni's Orders")
     .addItem("Sync Website Orders", "syncWebsiteOrders")
+    .addItem("Refresh Order Item Visibility", "refreshOrderItemVisibility")
     .addSeparator()
     .addItem("Install 15-minute auto sync", "installAutomaticSync")
     .addItem("Remove auto sync", "removeAutomaticSync")
@@ -114,6 +115,7 @@ function syncWebsiteOrders() {
     const orderRowsByCode = upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows);
     replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode);
     replaceFlightBoxComponents(flightComponentsSheet, websiteOrders, orderRowsByCode);
+    syncOrderItemVisibilityToOrders(ordersSheet, orderItemsSheet);
 
     if (EMAIL_OWNER_NEW_ORDERS) {
       newOrders.forEach(sendOwnerOrderEmail);
@@ -125,6 +127,73 @@ function syncWebsiteOrders() {
   }
 
   Logger.log(`Sync complete. Added ${newOrders.length} and refreshed ${updatedOrders.length} website order${updatedOrders.length === 1 ? "" : "s"}.`);
+}
+
+function refreshOrderItemVisibility() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  const ordersSheet = spreadsheet.getSheetByName("Orders");
+  const orderItemsSheet = spreadsheet.getSheetByName("Order Items");
+
+  if (!ordersSheet || !orderItemsSheet) {
+    throw new Error("Could not find the Orders and Order Items sheets.");
+  }
+
+  syncOrderItemVisibilityToOrders(ordersSheet, orderItemsSheet);
+}
+
+function syncOrderItemVisibilityToOrders(ordersSheet, orderItemsSheet) {
+  const lastOrderRow = lastFilledRow(ordersSheet, 1);
+  const lastItemRow = lastFilledRow(orderItemsSheet, 1);
+  if (lastItemRow < 2) return;
+
+  const visibleOrderIds = new Set();
+  if (lastOrderRow >= 2) {
+    const orderIds = ordersSheet.getRange(2, 1, lastOrderRow - 1, 1).getValues();
+    orderIds.forEach((row, index) => {
+      const orderId = String(row[0] || "").trim();
+      if (!orderId) return;
+
+      const sheetRow = index + 2;
+      const hiddenByUser = ordersSheet.isRowHiddenByUser(sheetRow);
+      const hiddenByFilter = typeof ordersSheet.isRowHiddenByFilter === "function"
+        && ordersSheet.isRowHiddenByFilter(sheetRow);
+
+      if (!hiddenByUser && !hiddenByFilter) {
+        visibleOrderIds.add(orderId);
+      }
+    });
+  }
+
+  const itemOrderIds = orderItemsSheet
+    .getRange(2, 1, lastItemRow - 1, 1)
+    .getValues()
+    .map(row => String(row[0] || "").trim());
+
+  orderItemsSheet.showRows(2, lastItemRow - 1);
+
+  let hiddenStart = null;
+  let hiddenCount = 0;
+  itemOrderIds.forEach((orderId, index) => {
+    const sheetRow = index + 2;
+    const shouldHide = Boolean(orderId) && !visibleOrderIds.has(orderId);
+
+    if (shouldHide && hiddenStart === null) {
+      hiddenStart = sheetRow;
+    }
+
+    if (!shouldHide && hiddenStart !== null) {
+      orderItemsSheet.hideRows(hiddenStart, sheetRow - hiddenStart);
+      hiddenCount += sheetRow - hiddenStart;
+      hiddenStart = null;
+    }
+  });
+
+  if (hiddenStart !== null) {
+    orderItemsSheet.hideRows(hiddenStart, lastItemRow - hiddenStart + 1);
+    hiddenCount += lastItemRow - hiddenStart + 1;
+  }
+
+  Logger.log(`Order Items visibility refreshed. Showing items for ${visibleOrderIds.size} displayed orders; hid ${hiddenCount} item rows.`);
 }
 
 function syncWebsiteOrdersSafe() {

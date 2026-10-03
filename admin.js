@@ -67,7 +67,6 @@ const el = {
   cancelLabelPrint: document.querySelector("#cancel-label-print"),
   selectAllLabels: document.querySelector("#select-all-labels"),
   clearAllLabels: document.querySelector("#clear-all-labels"),
-  includeIngredientLabels: document.querySelector("#include-ingredient-labels"),
   printSelectedLabels: document.querySelector("#print-selected-labels"),
   labelPrintRoot: document.querySelector("#label-print-root"),
   ordersList: document.querySelector("#orders-list"),
@@ -365,7 +364,6 @@ el.closeLabelReview.addEventListener("click", closeLabelReview);
 el.cancelLabelPrint.addEventListener("click", closeLabelReview);
 el.selectAllLabels.addEventListener("click", () => setLabelReviewChecked(true));
 el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
-el.includeIngredientLabels.addEventListener("change", updateLabelReviewCount);
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
 el.addManualItem.addEventListener("click", () => addManualItemRow());
@@ -1417,22 +1415,17 @@ function printOrderLabels(event) {
 
 function openLabelReview(labels, title) {
   state.pendingPrintLabels = labels;
-  el.includeIngredientLabels.checked = true;
   el.labelReviewTitle.textContent = title;
   el.labelReviewList.innerHTML = labels.map((label, index) => `
-    <label class="label-review-item">
-      <input type="checkbox" data-label-index="${index}" checked />
-      <span>
-        <strong>${escapeHtml(label.customerName)}</strong>
-        ${escapeHtml(label.itemName)}
-        <small>${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</small>
-        <small
-          class="ingredient-label-status ${ingredientLabelsAreReady(label.ingredientLabels) ? "is-ready" : "is-missing"}"
-          data-ingredient-label-index="${index}"
-        >
-          ${ingredientLabelReviewText(label.ingredientLabels)}
-        </small>
-      </span>
+    <div class="label-review-item">
+      <label class="order-label-choice">
+        <input type="checkbox" data-order-label-index="${index}" checked />
+        <span>
+          <strong>${escapeHtml(label.customerName)}</strong>
+          ${escapeHtml(label.itemName)}
+          <small>${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</small>
+        </span>
+      </label>
       <label class="label-note-field">
         Label note
         <input
@@ -1443,7 +1436,27 @@ function openLabelReview(labels, title) {
           maxlength="48"
         />
       </label>
-    </label>
+      <div class="ingredient-label-choices">
+        ${(label.ingredientLabels || []).length
+          ? label.ingredientLabels.map((ingredientLabel, ingredientIndex) => `
+            <label class="ingredient-label-choice">
+              <input
+                type="checkbox"
+                data-ingredient-order-index="${index}"
+                data-ingredient-index="${ingredientIndex}"
+                checked
+              />
+              <span>
+                <strong>${escapeHtml(ingredientLabel.itemName)}</strong>
+                <small>${ingredientLabel.netWeight
+                  ? `Net Wt. ${escapeHtml(ingredientLabel.netWeight)}`
+                  : "Net Wt. TBD"}</small>
+              </span>
+            </label>
+          `).join("")
+          : `<small class="ingredient-label-status is-missing">Ingredient label not configured</small>`}
+      </div>
+    </div>
   `).join("");
   el.labelReviewModal.hidden = false;
   updateLabelReviewCount();
@@ -1458,63 +1471,57 @@ function closeLabelReview() {
 }
 
 function setLabelReviewChecked(checked) {
-  el.labelReviewList.querySelectorAll("[data-label-index]").forEach(input => {
+  el.labelReviewList.querySelectorAll("[data-order-label-index], [data-ingredient-order-index]").forEach(input => {
     input.checked = checked;
   });
   updateLabelReviewCount();
 }
 
 function selectedReviewLabels() {
-  const includeIngredientLabels = el.includeIngredientLabels.checked;
-  return [...el.labelReviewList.querySelectorAll("[data-label-index]:checked")]
-    .map(input => {
-      const index = Number(input.dataset.labelIndex);
-      const label = state.pendingPrintLabels[index];
+  return state.pendingPrintLabels
+    .map((label, index) => {
       const note = el.labelReviewList.querySelector(`[data-label-note-index="${index}"]`)?.value.trim() || "";
-      return label ? {
+      const printOrderLabel = Boolean(
+        el.labelReviewList.querySelector(`[data-order-label-index="${index}"]`)?.checked
+      );
+      const ingredientLabels = (label.ingredientLabels || []).filter((ingredientLabel, ingredientIndex) => (
+        el.labelReviewList.querySelector(
+          `[data-ingredient-order-index="${index}"][data-ingredient-index="${ingredientIndex}"]`
+        )?.checked
+      ));
+
+      return printOrderLabel || ingredientLabels.length ? {
         ...label,
         note,
-        ingredientLabels: includeIngredientLabels ? (label.ingredientLabels || []) : []
+        printOrderLabel,
+        ingredientLabels
       } : null;
     })
     .filter(Boolean);
 }
 
 function updateLabelReviewCount() {
-  const includeIngredientLabels = el.includeIngredientLabels.checked;
-  el.labelReviewList.querySelectorAll("[data-ingredient-label-index]").forEach(status => {
-    const label = state.pendingPrintLabels[Number(status.dataset.ingredientLabelIndex)];
-    const ingredientLabels = label?.ingredientLabels || [];
-    status.textContent = includeIngredientLabels
-      ? ingredientLabelReviewText(ingredientLabels)
-      : "Ingredient labels will not print";
-    status.classList.toggle("is-ready", includeIngredientLabels && ingredientLabelsAreReady(ingredientLabels));
-    status.classList.toggle("is-missing", includeIngredientLabels && !ingredientLabelsAreReady(ingredientLabels));
-    status.classList.toggle("is-excluded", !includeIngredientLabels);
-  });
-
   const selectedLabels = selectedReviewLabels();
-  const selectedCount = selectedLabels.length;
-  const totalCount = state.pendingPrintLabels.length;
+  const selectedOrderCount = selectedLabels.filter(label => label.printOrderLabel).length;
+  const totalOrderCount = state.pendingPrintLabels.length;
+  const selectedIngredientCount = selectedLabels.reduce(
+    (total, label) => total + (label.ingredientLabels || []).length,
+    0
+  );
+  const totalIngredientCount = state.pendingPrintLabels.reduce(
+    (total, label) => total + (label.ingredientLabels || []).length,
+    0
+  );
   const printCount = totalPrintedLabelCount(selectedLabels);
-  el.labelReviewCount.textContent = `${selectedCount} of ${totalCount} order labels selected - ${printCount} total labels will print`;
-  el.printSelectedLabels.disabled = selectedCount === 0;
+  el.labelReviewCount.textContent = `${selectedOrderCount} of ${totalOrderCount} order labels and ${selectedIngredientCount} of ${totalIngredientCount} ingredient labels selected - ${printCount} total labels will print`;
+  el.printSelectedLabels.disabled = printCount === 0;
 }
 
 function totalPrintedLabelCount(labels) {
-  return labels.reduce((total, label) => total + 1 + (label.ingredientLabels || []).length, 0);
-}
-
-function ingredientLabelsAreReady(labels) {
-  return labels.length > 0;
-}
-
-function ingredientLabelReviewText(labels) {
-  if (!labels.length) return "Ingredient label not configured";
-
-  const labelCount = `${labels.length} ingredient label${labels.length === 1 ? "" : "s"} will also print`;
-  const hasTbdWeight = labels.some(label => !String(label.netWeight || "").trim());
-  return hasTbdWeight ? `${labelCount} - missing weight prints as TBD` : labelCount;
+  return labels.reduce(
+    (total, label) => total + (label.printOrderLabel ? 1 : 0) + (label.ingredientLabels || []).length,
+    0
+  );
 }
 
 function printSelectedLabels() {
@@ -1530,7 +1537,9 @@ function printSelectedLabels() {
 }
 
 function printLabels(labels) {
-  const printableLabels = labels.filter(label => label && (label.customerName || label.itemName));
+  const printableLabels = labels.filter(label => (
+    label && (label.printOrderLabel || (label.ingredientLabels || []).length)
+  ));
 
   if (!printableLabels.length) {
     setMessage(el.adminMessage, "No labels selected to print.", "error");
@@ -1538,7 +1547,7 @@ function printLabels(labels) {
   }
 
   const markup = printableLabels.flatMap(label => [
-    orderLabelMarkup(label),
+    ...(label.printOrderLabel ? [orderLabelMarkup(label)] : []),
     ...(label.ingredientLabels || []).map(ingredientLabelMarkup)
   ]).join("");
 
@@ -1600,20 +1609,14 @@ function ingredientLabelMarkup(label) {
 }
 
 function ingredientLabelTitleFontSize(title) {
-  if (title.length <= 24) return 10;
-  if (title.length <= 36) return 9;
-  if (title.length <= 48) return 8;
+  if (title.length <= 24) return 12.5;
+  if (title.length <= 36) return 10.5;
+  if (title.length <= 48) return 8.5;
   return 7.2;
 }
 
-function ingredientLabelCopyFontSize(ingredients) {
-  if (ingredients.length <= 190) return 6.8;
-  if (ingredients.length <= 250) return 6.2;
-  if (ingredients.length <= 320) return 5.7;
-  if (ingredients.length <= 400) return 5.1;
-  if (ingredients.length <= 500) return 4.6;
-  if (ingredients.length <= 620) return 4.1;
-  return 3.7;
+function ingredientLabelCopyFontSize() {
+  return 6;
 }
 
 function ingredientLabelProductTitle(name, product) {

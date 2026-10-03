@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20261002-ingredient-labels-v6" />
+  <link rel="stylesheet" href="admin.css?v=20261002-ingredient-labels-v8" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -448,12 +448,8 @@
         <button class="secondary-button compact-button" type="button" id="close-label-review">Close</button>
       </div>
       <div class="label-review-actions">
-        <button class="secondary-button compact-button" type="button" id="select-all-labels">Select all</button>
-        <button class="secondary-button compact-button" type="button" id="clear-all-labels">Clear all</button>
-        <label class="include-ingredient-labels">
-          <input type="checkbox" id="include-ingredient-labels" checked />
-          <span>Include ingredient labels</span>
-        </label>
+        <button class="secondary-button compact-button" type="button" id="select-all-labels">Select all labels</button>
+        <button class="secondary-button compact-button" type="button" id="clear-all-labels">Clear all labels</button>
       </div>
       <div id="label-review-list" class="label-review-list"></div>
       <div class="label-review-footer">
@@ -466,6 +462,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20261002-ingredient-labels-v6"></script>
+  <script src="admin.js?v=20261002-ingredient-labels-v8"></script>
 </body>
 </html>

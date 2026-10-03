@@ -513,16 +513,19 @@
 }
 
 .dymo-ingredient-label {
-  justify-content: flex-start;
-  gap: 2px;
-  padding: 0.035in 0.055in;
+  display: grid;
+  grid-template-rows: 0.2in minmax(0, 1fr) 0.18in;
+  gap: 0;
+  padding: 0.025in 0.05in;
   font-family: "Times New Roman", serif;
 }
 
 .dymo-ingredient-title {
-  display: block;
-  flex: 0 0 auto;
-  line-height: 1.1;
+  display: grid;
+  place-content: center;
+  min-height: 0;
+  overflow: hidden;
+  line-height: 0.95;
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -531,9 +534,8 @@
   display: grid;
   place-content: center;
   min-height: 0;
-  flex: 1 1 auto;
   overflow: hidden;
-  line-height: 1.02;
+  line-height: 1;
   overflow-wrap: anywhere;
   text-align: center;
   white-space: normal;
@@ -541,9 +543,10 @@
 
 .dymo-ingredient-footer {
   display: block;
-  flex: 0 0 auto;
-  font-size: 5.5pt;
-  line-height: 1.02;
+  align-self: end;
+  overflow: hidden;
+  font-size: 6pt;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -590,24 +593,6 @@
   margin-bottom: 12px;
 }
 
-.include-ingredient-labels {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 0 auto;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fffdf9;
-  font-weight: 800;
-}
-
-.include-ingredient-labels input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-}
-
 .label-review-list {
   display: grid;
   gap: 8px;
@@ -618,21 +603,29 @@
 
 .label-review-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fffdf9;
 }
 
-.label-review-item input {
+.label-review-item input[type="checkbox"] {
   width: 20px;
   height: 20px;
+  margin: 0;
 }
 
-.label-review-item span {
+.order-label-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.order-label-choice span,
+.ingredient-label-choice span {
   display: grid;
   gap: 2px;
 }
@@ -642,23 +635,31 @@
   font-weight: 700;
 }
 
-.label-review-item .ingredient-label-status.is-ready {
-  color: #23623b;
-}
-
 .label-review-item .ingredient-label-status.is-missing {
   color: #9b3a2d;
 }
 
-.label-review-item .ingredient-label-status.is-excluded {
-  color: var(--muted);
+.ingredient-label-choices {
+  display: grid;
+  gap: 6px;
+  margin-left: 32px;
+}
+
+.ingredient-label-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid #23623b;
+  background: #f4faf5;
 }
 
 .label-note-field {
-  grid-column: 2;
   display: grid;
   gap: 4px;
-  margin: 0;
+  margin: 0 0 0 32px;
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 800;
@@ -1387,10 +1388,6 @@
     display: grid;
   }
 
-  .include-ingredient-labels {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 
 @media print {
