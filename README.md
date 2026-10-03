@@ -245,13 +245,16 @@ The admin page can:
 - view orders without opening Supabase
 - mark payment status as pending, paid, or refunded
 - mark fulfillment status as new, prepping, ready, fulfilled, or canceled
-- print 1 inch by 2 1/8 inch Dymo labels for a single order or a reviewed order-date batch
+- print 1 inch by 2 1/8 inch Dymo order labels for a single order or a reviewed order-date batch
+- automatically print a matching ingredient label after each selected order label when that product has ingredient-label text configured
 - archive finished orders
 - add or edit Friday pickup dates
 - open or close pickup dates
 - change pickup-date capacity
 
 Use archive instead of delete so order history is not lost accidentally.
+
+Ingredient labels are maintained under Admin -> Products -> Ingredient label. Each product can store its ingredient/allergen statement, full-size net weight, and a separate mini net weight for flight boxes. The first database migration copies reviewed food ingredient descriptions into the label field and imports known full-loaf weights from the existing DYMO labels. In the label review window, each selected order label shows how many ingredient labels will print with it. Products without configured ingredient text print only the order label and are marked as missing in the review window.
 
 ## Capacity Protection
 

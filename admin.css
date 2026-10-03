@@ -512,6 +512,53 @@
   line-height: 0.98;
 }
 
+.dymo-ingredient-label {
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 0.035in 0.055in;
+  font-family: "Times New Roman", serif;
+}
+
+.dymo-ingredient-title {
+  display: block;
+  overflow: hidden;
+  font-size: 9pt;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dymo-ingredient-copy {
+  display: -webkit-box;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 5.7pt;
+  line-height: 1.02;
+  text-align: center;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+}
+
+.dymo-ingredient-copy.is-long {
+  font-size: 5.1pt;
+  -webkit-line-clamp: 9;
+}
+
+.dymo-ingredient-copy.is-very-long {
+  font-size: 4.6pt;
+  -webkit-line-clamp: 10;
+}
+
+.dymo-ingredient-footer {
+  display: block;
+  flex: 0 0 auto;
+  font-size: 5.5pt;
+  line-height: 1.02;
+  white-space: nowrap;
+}
+
 .label-review-modal {
   position: fixed;
   inset: 0;
@@ -586,6 +633,14 @@
 .label-review-item small {
   color: var(--muted);
   font-weight: 700;
+}
+
+.label-review-item .ingredient-label-status.is-ready {
+  color: #23623b;
+}
+
+.label-review-item .ingredient-label-status.is-missing {
+  color: #9b3a2d;
 }
 
 .label-note-field {
@@ -973,6 +1028,51 @@
   margin: 0;
 }
 
+.product-label-editor {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.product-label-editor summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--accent-dark);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.product-label-editor summary span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.product-label-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px) minmax(150px, 220px) auto;
+  align-items: end;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.product-label-fields label {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.product-label-ingredients-field {
+  grid-column: 1 / -1;
+}
+
+.product-label-fields textarea {
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+}
+
 .product-inventory-field {
   display: grid;
   min-width: 112px;
@@ -1136,6 +1236,14 @@
 
   .admin-product-checks > * {
     flex: 1 1 150px;
+  }
+
+  .product-label-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .product-label-ingredients-field {
+    grid-column: auto;
   }
 
   .order-summary {

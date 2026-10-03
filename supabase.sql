@@ -25,6 +25,9 @@ create table if not exists public.products (
   display_group text,
   option_label text,
   image_url text,
+  label_ingredients text,
+  label_net_weight text,
+  label_mini_net_weight text,
   shippable boolean not null default false,
   tax_category text not null default 'home_bakery' check (tax_category in ('home_bakery','general_product')),
   track_inventory boolean not null default false,
@@ -352,6 +355,50 @@ add column if not exists option_label text;
 
 alter table public.products
 add column if not exists image_url text;
+
+alter table public.products
+add column if not exists label_ingredients text;
+
+alter table public.products
+add column if not exists label_net_weight text;
+
+alter table public.products
+add column if not exists label_mini_net_weight text;
+
+-- Product descriptions already contain the reviewed ingredient and allergen
+-- statements. Copy them once so label wording can be edited independently.
+update public.products
+set label_ingredients = description
+where label_ingredients is null
+  and description ilike '%ingredients:%';
+
+-- Net weights migrated from the existing 2 1/8 x 1 inch DYMO label files.
+with label_weights(product_id, net_weight) as (
+  values
+    ('01fab002-d921-4c71-9e44-e55ee43dd828'::uuid, '1145 g'),
+    ('3318bb3c-c605-499b-9e13-d27bd4ff9ad9'::uuid, '910 g'),
+    ('263b6244-0eb3-4dc7-ba1c-1e1aed04d96b'::uuid, '1050 g'),
+    ('fc14e979-e10f-4bc4-ba3b-f005a9d21236'::uuid, '1140 g'),
+    ('2ebc6580-1177-4b8b-93cb-e189a491bd57'::uuid, '1130 g'),
+    ('e1481315-234b-4849-8641-49ba603ccfbf'::uuid, '480 g'),
+    ('2e201826-4b19-4e34-8376-b95c427022c3'::uuid, '910 g'),
+    ('a7462cc2-6320-4c61-b9ac-053368cb418b'::uuid, '910 g'),
+    ('135cf8c8-efd8-46f4-9859-1e26f8357e5a'::uuid, '1060 g'),
+    ('6d500e45-b379-47fa-9e49-c9e7ff053db7'::uuid, '910 g'),
+    ('c84068ab-3b17-4586-b9e4-1a3e00a55956'::uuid, '1130 g'),
+    ('38abab70-82d0-4186-8390-12f266804858'::uuid, '1130 g'),
+    ('0692d261-5fce-4e46-8448-005b18e5123f'::uuid, '1125 g')
+)
+update public.products as p
+set label_net_weight = w.net_weight
+from label_weights as w
+where p.id = w.product_id
+  and p.label_net_weight is null;
+
+update public.products
+set label_net_weight = '1180 g'
+where lower(trim(name)) = 'pepperoni pizza'
+  and label_net_weight is null;
 
 alter table public.products
 add column if not exists shippable boolean not null default false;
@@ -756,6 +803,8 @@ drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer,boolean,integer);
+drop function if exists public.admin_save_product_label(uuid,text,text);
+drop function if exists public.admin_save_product_label(uuid,text,text,text);
 drop function if exists public.admin_set_product_archived(uuid,boolean);
 drop function if exists public.admin_get_tax_settings();
 drop function if exists public.admin_save_tax_settings(boolean,text);
@@ -1558,6 +1607,12 @@ begin
           'name', coalesce(oi.custom_name, p.name),
           'quantity', oi.quantity,
           'item_note', oi.item_note,
+          'label_ingredients', coalesce(
+            p.label_ingredients,
+            case when p.description ilike '%ingredients:%' then p.description else null end
+          ),
+          'label_net_weight', p.label_net_weight,
+          'label_mini_net_weight', p.label_mini_net_weight,
           'unit_price_cents', oi.unit_price_cents,
           'display_group', p.display_group,
           'option_label', p.option_label,
@@ -1796,10 +1851,17 @@ begin
           'name', coalesce(oi.custom_name, p.name),
           'quantity', oi.quantity,
           'item_note', oi.item_note,
+          'label_ingredients', coalesce(
+            p.label_ingredients,
+            case when p.description ilike '%ingredients:%' then p.description else null end
+          ),
+          'label_net_weight', p.label_net_weight,
+          'label_mini_net_weight', p.label_mini_net_weight,
           'unit_price_cents', oi.unit_price_cents,
           'tax_category', coalesce(p.tax_category, oi.custom_tax_category, 'home_bakery'),
           'capacity_units', coalesce(p.capacity_units, oi.custom_capacity_units, 0),
           'category', p.category,
+          'product_type', p.product_type,
           'display_group', p.display_group,
           'option_label', p.option_label,
           'shippable', p.shippable
@@ -2537,6 +2599,9 @@ returns table(
   display_group text,
   option_label text,
   image_url text,
+  label_ingredients text,
+  label_net_weight text,
+  label_mini_net_weight text,
   shippable boolean,
   tax_category text,
   track_inventory boolean,
@@ -2568,6 +2633,12 @@ begin
     p.display_group,
     p.option_label,
     p.image_url,
+    coalesce(
+      p.label_ingredients,
+      case when p.description ilike '%ingredients:%' then p.description else null end
+    ),
+    p.label_net_weight,
+    p.label_mini_net_weight,
     p.shippable,
     p.tax_category,
     p.track_inventory,
@@ -2580,6 +2651,44 @@ begin
     p.sort_order
   from public.products p
   order by p.category asc, coalesce(p.display_group, p.name) asc, p.sort_order asc, coalesce(p.option_label, p.name) asc;
+end;
+$$;
+
+create or replace function public.admin_save_product_label(
+  p_product_id uuid,
+  p_label_ingredients text,
+  p_label_net_weight text,
+  p_label_mini_net_weight text
+)
+returns table(
+  saved_id uuid,
+  saved_label_ingredients text,
+  saved_label_net_weight text,
+  saved_label_mini_net_weight text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  update public.products as p
+  set
+    label_ingredients = nullif(trim(coalesce(p_label_ingredients, '')), ''),
+    label_net_weight = nullif(trim(coalesce(p_label_net_weight, '')), ''),
+    label_mini_net_weight = nullif(trim(coalesce(p_label_mini_net_weight, '')), '')
+  where p.id = p_product_id
+  returning p.id, p.label_ingredients, p.label_net_weight, p.label_mini_net_weight
+  into saved_id, saved_label_ingredients, saved_label_net_weight, saved_label_mini_net_weight;
+
+  if saved_id is null then
+    raise exception 'Product not found';
+  end if;
+
+  return next;
 end;
 $$;
 
@@ -3396,6 +3505,9 @@ grant execute on function public.admin_save_pickup_date(uuid,date,integer,boolea
 
 revoke all on function public.admin_list_products() from public;
 grant execute on function public.admin_list_products() to authenticated;
+
+revoke all on function public.admin_save_product_label(uuid,text,text,text) from public;
+grant execute on function public.admin_save_product_label(uuid,text,text,text) to authenticated;
 
 revoke all on function public.adjust_product_inventory(uuid,integer) from public;
 

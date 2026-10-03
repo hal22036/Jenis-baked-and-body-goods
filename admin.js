@@ -275,7 +275,8 @@ async function showAdmin() {
   el.loginPanel.hidden = true;
   el.adminPageNav.hidden = false;
   await loadPickupDates();
-  await Promise.all([loadOrders(), loadProducts(), loadRewards(), loadCoupons(), loadTaxSettings()]);
+  await loadProducts();
+  await Promise.all([loadOrders(), loadRewards(), loadCoupons(), loadTaxSettings()]);
   showAdminPage(currentAdminPage());
 }
 
@@ -1220,6 +1221,7 @@ function renderOrders() {
 
 function labelPrintButtonMarkup(pickupDate, orders, batchType) {
   const labels = orderLabelsFor(orders, batchType);
+  const printCount = totalPrintedLabelCount(labels);
   const label = batchType === "bath-body" ? "Print Bath & Body labels" : "Print Baked Goods labels";
 
   return `
@@ -1230,7 +1232,7 @@ function labelPrintButtonMarkup(pickupDate, orders, batchType) {
       data-print-pickup-date="${pickupDate}"
       ${labels.length ? "" : "disabled"}
     >
-      ${label} (${labels.length})
+      ${label} (${printCount})
     </button>
   `;
 }
@@ -1335,13 +1337,55 @@ function orderLabelsFor(orders, batchType) {
             itemName: adminItemName(item),
             note: item.item_note || "",
             paymentMethod: paymentLabel(order.payment_method),
-            pickupDate: order.pickup_date
+            pickupDate: order.pickup_date,
+            ingredientLabels: ingredientLabelsForOrderItem(item)
           });
         }
       });
     });
 
   return labels;
+}
+
+function ingredientLabelsForOrderItem(item) {
+  if (item.product_type === "flight_box" || String(item.name || "").trim().toLowerCase() === "mini loaf flight box") {
+    return flightBoxIngredientLabels(item.item_note);
+  }
+
+  const ingredients = String(item.label_ingredients || "").trim();
+  if (!ingredients) return [];
+
+  return [{
+    itemName: adminItemName(item),
+    ingredients,
+    netWeight: String(item.label_net_weight || "").trim()
+  }];
+}
+
+function flightBoxIngredientLabels(itemNote) {
+  return String(itemNote || "")
+    .split(/\r?\n/)
+    .map(line => line.trim().match(/^Loaf\s+\d+:\s+(.+?)(?:\s+\[\$\d+(?:\.\d{1,2})?\])?$/i))
+    .filter(Boolean)
+    .map(match => productForIngredientLabelName(match[1]))
+    .filter(Boolean)
+    .map(product => ({
+      itemName: `${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name} Mini`,
+      ingredients: String(product.label_ingredients || "").trim() || ingredientLabelFallback(product.description),
+      netWeight: String(product.label_mini_net_weight || "").trim()
+    }))
+    .filter(label => label.ingredients);
+}
+
+function productForIngredientLabelName(name) {
+  const normalizedName = String(name || "").trim().toLowerCase();
+  return state.products.find(product => {
+    const productName = String(product.name || "").trim().toLowerCase();
+    const displayName = product.display_group && product.option_label
+      ? `${product.display_group} - ${product.option_label}`.trim().toLowerCase()
+      : productName;
+    return productName === normalizedName || displayName === normalizedName;
+  });
 }
 
 function printOrderLabels(event) {
@@ -1376,6 +1420,9 @@ function openLabelReview(labels, title) {
         <strong>${escapeHtml(label.customerName)}</strong>
         ${escapeHtml(label.itemName)}
         <small>${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</small>
+        <small class="ingredient-label-status ${ingredientLabelsAreReady(label.ingredientLabels) ? "is-ready" : "is-missing"}">
+          ${ingredientLabelReviewText(label.ingredientLabels)}
+        </small>
       </span>
       <label class="label-note-field">
         Label note
@@ -1420,10 +1467,27 @@ function selectedReviewLabels() {
 }
 
 function updateLabelReviewCount() {
-  const selectedCount = selectedReviewLabels().length;
+  const selectedLabels = selectedReviewLabels();
+  const selectedCount = selectedLabels.length;
   const totalCount = state.pendingPrintLabels.length;
-  el.labelReviewCount.textContent = `${selectedCount} of ${totalCount} labels selected`;
+  const printCount = totalPrintedLabelCount(selectedLabels);
+  el.labelReviewCount.textContent = `${selectedCount} of ${totalCount} order labels selected - ${printCount} total labels will print`;
   el.printSelectedLabels.disabled = selectedCount === 0;
+}
+
+function totalPrintedLabelCount(labels) {
+  return labels.reduce((total, label) => total + 1 + (label.ingredientLabels || []).length, 0);
+}
+
+function ingredientLabelsAreReady(labels) {
+  return labels.length > 0 && labels.every(label => String(label.netWeight || "").trim());
+}
+
+function ingredientLabelReviewText(labels) {
+  if (!labels.length) return "Ingredient label not configured";
+
+  const labelCount = `${labels.length} ingredient label${labels.length === 1 ? "" : "s"} will also print`;
+  return ingredientLabelsAreReady(labels) ? labelCount : `${labelCount} - net weight missing`;
 }
 
 function printSelectedLabels() {
@@ -1446,19 +1510,10 @@ function printLabels(labels) {
     return;
   }
 
-  el.labelPrintRoot.innerHTML = printableLabels.map(label => {
-    const itemName = String(label.itemName || "Order item");
-    const itemSizeClass = `${itemName.length > 28 ? "is-long" : ""} ${itemName.length > 42 ? "is-very-long" : ""}`.trim();
-
-    return `
-    <section class="dymo-label">
-      <strong class="dymo-label-customer">${escapeHtml(label.customerName)}</strong>
-      <span class="dymo-label-item ${itemSizeClass}">${escapeHtml(itemName)}</span>
-      <span class="dymo-label-details">${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</span>
-      ${label.note ? `<em>${escapeHtml(label.note)}</em>` : ""}
-    </section>
-  `;
-  }).join("");
+  el.labelPrintRoot.innerHTML = printableLabels.flatMap(label => [
+    orderLabelMarkup(label),
+    ...(label.ingredientLabels || []).map(ingredientLabelMarkup)
+  ]).join("");
 
   document.body.classList.add("printing-labels");
   window.print();
@@ -1466,6 +1521,40 @@ function printLabels(labels) {
     document.body.classList.remove("printing-labels");
     el.labelPrintRoot.innerHTML = "";
   }, 500);
+}
+
+function orderLabelMarkup(label) {
+  const itemName = String(label.itemName || "Order item");
+  const itemSizeClass = `${itemName.length > 28 ? "is-long" : ""} ${itemName.length > 42 ? "is-very-long" : ""}`.trim();
+
+  return `
+    <section class="dymo-label">
+      <strong class="dymo-label-customer">${escapeHtml(label.customerName)}</strong>
+      <span class="dymo-label-item ${itemSizeClass}">${escapeHtml(itemName)}</span>
+      <span class="dymo-label-details">${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</span>
+      ${label.note ? `<em>${escapeHtml(label.note)}</em>` : ""}
+    </section>
+  `;
+}
+
+function ingredientLabelMarkup(label) {
+  const ingredients = String(label.ingredients || "").trim();
+  const ingredientSizeClass = ingredients.length > 520
+    ? "is-very-long"
+    : ingredients.length > 390
+      ? "is-long"
+      : "";
+
+  return `
+    <section class="dymo-label dymo-ingredient-label">
+      <strong class="dymo-ingredient-title">${escapeHtml(label.itemName)}</strong>
+      <span class="dymo-ingredient-copy ${ingredientSizeClass}">${escapeHtml(ingredients)}</span>
+      <span class="dymo-ingredient-footer">
+        ${label.netWeight ? `Net Wt. ${escapeHtml(label.netWeight)} | ` : ""}Home Produced<br />
+        Jeni's Baked &amp; Body Goods | 801-602-8443
+      </span>
+    </section>
+  `;
 }
 
 function breakdownTableMarkup(title, items) {
@@ -1669,6 +1758,7 @@ function orderCardMarkup(order) {
 
 function singleOrderLabelPrintButtonMarkup(order, batchType) {
   const labels = orderLabelsFor([order], batchType);
+  const printCount = totalPrintedLabelCount(labels);
   const label = batchType === "bath-body" ? "Print Bath & Body labels" : "Print Baked Goods labels";
 
   return `
@@ -1679,7 +1769,7 @@ function singleOrderLabelPrintButtonMarkup(order, batchType) {
       data-print-order-id="${order.order_id}"
       ${labels.length ? "" : "disabled"}
     >
-      ${label} (${labels.length})
+      ${label} (${printCount})
     </button>
   `;
 }
@@ -2209,6 +2299,29 @@ function renderProducts() {
                 ${product.archived ? "Restore product" : "Archive product"}
               </button>
             </div>
+            <details class="product-label-editor">
+              <summary>
+                Ingredient label
+                <span>${productLabelStatus(product)}</span>
+              </summary>
+              <div class="product-label-fields">
+                <label class="product-label-ingredients-field">
+                  Ingredient and allergen text
+                  <textarea data-product-label-ingredients rows="5" placeholder="Ingredients: ...&#10;Contains: ...">${escapeHtml(product.label_ingredients || ingredientLabelFallback(product.description))}</textarea>
+                </label>
+                <label>
+                  Full-size net weight
+                  <input type="text" data-product-label-net-weight value="${escapeAttribute(product.label_net_weight || "")}" placeholder="Example: 910 g" />
+                </label>
+                ${product.product_type !== "flight_box" && Number(product.capacity_units || 0) > 0 ? `
+                  <label>
+                    Mini net weight
+                    <input type="text" data-product-label-mini-net-weight value="${escapeAttribute(product.label_mini_net_weight || "")}" placeholder="Enter actual mini weight" />
+                  </label>
+                ` : `<input type="hidden" data-product-label-mini-net-weight value="${escapeAttribute(product.label_mini_net_weight || "")}" />`}
+                <button class="secondary-button compact-button" type="button" data-save-product-label>Save ingredient label</button>
+              </div>
+            </details>
           </article>
         `).join("")}
       </div>
@@ -2222,6 +2335,48 @@ function renderProducts() {
   el.productsList.querySelectorAll("[data-product-archive]").forEach(button => {
     button.addEventListener("click", setProductArchived);
   });
+
+  el.productsList.querySelectorAll("[data-save-product-label]").forEach(button => {
+    button.addEventListener("click", saveProductLabel);
+  });
+}
+
+function ingredientLabelFallback(description) {
+  const text = String(description || "").trim();
+  return /ingredients:/i.test(text) ? text : "";
+}
+
+function productLabelStatus(product) {
+  if (!String(product.label_ingredients || ingredientLabelFallback(product.description)).trim()) return "Needs ingredients";
+  if (!String(product.label_net_weight || "").trim()) return "Needs full-size weight";
+  if (product.flight_eligible && !String(product.label_mini_net_weight || "").trim()) return "Needs mini weight";
+  return "Ready";
+}
+
+async function saveProductLabel(event) {
+  const button = event.currentTarget;
+  const row = button.closest("[data-product-id]");
+  const productName = row.querySelector("strong")?.textContent?.trim() || "product";
+
+  button.disabled = true;
+  setMessage(el.productAdminMessage, `Saving ${productName} ingredient label...`);
+
+  const { error } = await supabaseClient.rpc("admin_save_product_label", {
+    p_product_id: row.dataset.productId,
+    p_label_ingredients: row.querySelector("[data-product-label-ingredients]").value.trim() || null,
+    p_label_net_weight: row.querySelector("[data-product-label-net-weight]").value.trim() || null,
+    p_label_mini_net_weight: row.querySelector("[data-product-label-mini-net-weight]").value.trim() || null
+  });
+
+  button.disabled = false;
+
+  if (error) {
+    setMessage(el.productAdminMessage, error.message, "error");
+    return;
+  }
+
+  setMessage(el.productAdminMessage, `${productName} ingredient label saved.`, "success");
+  await Promise.all([loadProducts(), loadOrders()]);
 }
 
 async function setProductArchived(event) {
