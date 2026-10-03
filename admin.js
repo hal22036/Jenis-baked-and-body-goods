@@ -1256,6 +1256,7 @@ function archivePickupDateButtonMarkup(pickupDate) {
 
 function bakingBreakdownMarkup(orders) {
   const breadTotals = new Map();
+  const miniLoafTotals = new Map();
   const treatTotals = new Map();
   const countableOrders = orders.filter(order => order.fulfillment_status !== "canceled");
   const weeklyIncomeCents = countableOrders.reduce((sum, order) => sum + Number(order.total_cents || 0), 0);
@@ -1264,14 +1265,22 @@ function bakingBreakdownMarkup(orders) {
     (order.items || []).forEach(item => {
       const itemName = adminItemName(item);
       const targetTotals = isBreadLoafItem(item) ? breadTotals : treatTotals;
-      targetTotals.set(itemName, (targetTotals.get(itemName) || 0) + Number(item.quantity || 0));
+      const quantity = Number(item.quantity || 0);
+      targetTotals.set(itemName, (targetTotals.get(itemName) || 0) + quantity);
+
+      if (isFlightBoxItem(item)) {
+        flightBoxMiniLoafNames(item.item_note).forEach(name => {
+          miniLoafTotals.set(name, (miniLoafTotals.get(name) || 0) + quantity);
+        });
+      }
     });
   });
 
   const breadItems = sortedBreakdownItems(breadTotals);
+  const miniLoafItems = sortedBreakdownItems(miniLoafTotals);
   const treatItems = sortedBreakdownItems(treatTotals);
 
-  if (!breadItems.length && !treatItems.length) {
+  if (!breadItems.length && !miniLoafItems.length && !treatItems.length) {
     return `
       <aside class="baking-breakdown">
         ${bakingBreakdownHeaderMarkup(weeklyIncomeCents)}
@@ -1285,6 +1294,7 @@ function bakingBreakdownMarkup(orders) {
       ${bakingBreakdownHeaderMarkup(weeklyIncomeCents)}
       <div class="baking-breakdown-sections">
         ${breakdownTableMarkup("Bread loaf orders", breadItems)}
+        ${breakdownTableMarkup("Mini loaves for flight boxes", miniLoafItems)}
         ${breakdownTableMarkup("Other Delicious Treats", treatItems)}
       </div>
     </aside>
@@ -1311,6 +1321,19 @@ function sortedBreakdownItems(itemTotals) {
 
 function isBreadLoafItem(item) {
   return Number(item.capacity_units || 0) > 0 && item.category !== "Other Delicious Treats";
+}
+
+function isFlightBoxItem(item) {
+  return item.product_type === "flight_box"
+    || String(item.name || "").trim().toLowerCase() === "mini loaf flight box";
+}
+
+function flightBoxMiniLoafNames(itemNote) {
+  return String(itemNote || "")
+    .split(/\r?\n/)
+    .map(line => line.trim().match(/^Loaf\s+\d+:\s+(.+?)(?:\s+\[\$\d+(?:\.\d{1,2})?\])?$/i))
+    .filter(Boolean)
+    .map(match => match[1].trim());
 }
 
 function isBathBodyItem(item) {
@@ -1348,7 +1371,7 @@ function orderLabelsFor(orders, batchType) {
 }
 
 function ingredientLabelsForOrderItem(item) {
-  if (item.product_type === "flight_box" || String(item.name || "").trim().toLowerCase() === "mini loaf flight box") {
+  if (isFlightBoxItem(item)) {
     return flightBoxIngredientLabels(item.item_note);
   }
 
@@ -1363,11 +1386,8 @@ function ingredientLabelsForOrderItem(item) {
 }
 
 function flightBoxIngredientLabels(itemNote) {
-  return String(itemNote || "")
-    .split(/\r?\n/)
-    .map(line => line.trim().match(/^Loaf\s+\d+:\s+(.+?)(?:\s+\[\$\d+(?:\.\d{1,2})?\])?$/i))
-    .filter(Boolean)
-    .map(match => productForIngredientLabelName(match[1]))
+  return flightBoxMiniLoafNames(itemNote)
+    .map(name => productForIngredientLabelName(name))
     .filter(Boolean)
     .map(product => ({
       itemName: `${ingredientLabelProductTitle(
