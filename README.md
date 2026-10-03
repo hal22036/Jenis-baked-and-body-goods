@@ -103,9 +103,10 @@ The SQL setup file does not auto-create products, so rerunning it will not bring
 
 For the October 2026 loaf catalog update, run
 `supabase-product-catalog-update.sql` in the Supabase SQL Editor after
-`supabase.sql`. It adds the seasonal loaves, groups banana and pumpkin flavor
-choices into shared storefront cards, and corrects existing bread ingredient
-and allergen descriptions. The catalog update is idempotent and can be rerun.
+`supabase.sql`. It adds the seasonal loaves, keeps Light Banana Sourdough as a
+standalone product, groups the other banana and pumpkin flavor choices into
+shared storefront cards, and corrects existing bread ingredient and allergen
+descriptions. The catalog update is idempotent and can be rerun.
 
 Edit:
 
@@ -128,6 +129,12 @@ Prices are stored in cents:
 Set `active` to `false` to hide a bread without deleting it.
 
 Admins can also turn products on or off from `admin.html` under Weekly menu availability. Turning a product off sets `active = false`, so it disappears from the public order page without deleting the row.
+
+The storefront also supports a `Mini Loaf Flight Box` containing four customer-selected mini loaves. Run the current `supabase.sql` once to add the flight product and its product settings. In Admin -> Products, use **Offer in flights** and **Mini price** to control each dropdown option. The initial mini prices use the recommended tiers and remain editable.
+
+Each configured box is saved as one order item. Its four loaf choices are stored in the item note, shown on invoices, and included in the Google Sheet sync notes.
+
+Each flight box contains four minis and reserves one loaf spot in the pickup-date total.
 
 The storefront sorts product cards inside each category from lowest price to highest price, then alphabetically when prices match. Grouped choices use `sort_order` first, then `option_label`, so you can place `Plain` before flavored granola or `2 oz` before larger sizes.
 

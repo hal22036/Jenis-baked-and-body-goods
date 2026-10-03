@@ -29,9 +29,15 @@ create table if not exists public.products (
   tax_category text not null default 'home_bakery' check (tax_category in ('home_bakery','general_product')),
   track_inventory boolean not null default false,
   inventory_quantity integer not null default 0 check (inventory_quantity >= 0),
+  product_type text not null default 'standard' check (product_type in ('standard','flight_box')),
+  flight_eligible boolean not null default false,
+  mini_price_cents integer check (mini_price_cents is null or mini_price_cents >= 0),
   active boolean not null default true,
   archived boolean not null default false,
-  sort_order integer not null default 0
+  sort_order integer not null default 0,
+  constraint products_flight_price_check check (
+    not flight_eligible or coalesce(mini_price_cents, 0) > 0
+  )
 );
 
 create table if not exists public.pickup_dates (
@@ -363,6 +369,36 @@ alter table public.products
 add column if not exists inventory_quantity integer not null default 0;
 
 alter table public.products
+add column if not exists product_type text not null default 'standard';
+
+alter table public.products
+add column if not exists flight_eligible boolean not null default false;
+
+alter table public.products
+add column if not exists mini_price_cents integer;
+
+alter table public.products
+drop constraint if exists products_product_type_check;
+
+alter table public.products
+add constraint products_product_type_check
+check (product_type in ('standard','flight_box'));
+
+alter table public.products
+drop constraint if exists products_mini_price_cents_check;
+
+alter table public.products
+add constraint products_mini_price_cents_check
+check (mini_price_cents is null or mini_price_cents >= 0);
+
+alter table public.products
+drop constraint if exists products_flight_price_check;
+
+alter table public.products
+add constraint products_flight_price_check
+check (not flight_eligible or coalesce(mini_price_cents, 0) > 0);
+
+alter table public.products
 drop constraint if exists products_tax_category_check;
 
 alter table public.products
@@ -519,6 +555,69 @@ group by d.id, d.pickup_date, d.capacity, d.is_open;
 -- )
 -- on conflict do nothing;
 
+insert into public.products (
+  name,
+  description,
+  price_cents,
+  capacity_units,
+  category,
+  shippable,
+  tax_category,
+  product_type,
+  flight_eligible,
+  active,
+  archived,
+  sort_order
+)
+select
+  'Mini Loaf Flight Box',
+  'Choose four mini sourdough loaves. The box price updates with your flavor selections.',
+  0,
+  1,
+  'Other Delicious Treats',
+  false,
+  'home_bakery',
+  'flight_box',
+  false,
+  true,
+  false,
+  1
+where not exists (
+  select 1 from public.products where product_type = 'flight_box'
+);
+
+update public.products
+set
+  name = 'Mini Loaf Flight Box',
+  description = 'Choose four mini sourdough loaves. The box price updates with your flavor selections.',
+  price_cents = 0,
+  capacity_units = 1,
+  category = 'Other Delicious Treats',
+  shippable = false,
+  tax_category = 'home_bakery',
+  flight_eligible = false,
+  mini_price_cents = null,
+  archived = false
+where product_type = 'flight_box';
+
+-- Give existing loaf products an editable starting mini price. These defaults
+-- are only applied once; later admin price changes are preserved on reruns.
+update public.products
+set
+  flight_eligible = true,
+  mini_price_cents = case
+    when price_cents <= 1200 then 700
+    when price_cents <= 1500 then 800
+    when price_cents <= 1700 then 900
+    when price_cents <= 1800 then 1000
+    else 1100
+  end
+where product_type = 'standard'
+  and capacity_units > 0
+  and tax_category = 'home_bakery'
+  and category in ('Everyday','Sweet','Savory','Turn Up the Heat')
+  and mini_price_cents is null;
+
 -- Pickup dates are intentionally not seeded automatically.
 -- Add only the Fridays you want to offer in Table Editor -> pickup_dates.
 -- Example:
@@ -648,6 +747,7 @@ drop function if exists public.admin_update_product_active(uuid,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text);
 drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer);
+drop function if exists public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer,boolean,integer);
 drop function if exists public.admin_set_product_archived(uuid,boolean);
 drop function if exists public.admin_get_tax_settings();
 drop function if exists public.admin_save_tax_settings(boolean,text);
@@ -931,6 +1031,77 @@ as $$
   from bath_bomb_items;
 $$;
 
+create or replace function public.flight_box_price(
+  p_choices jsonb
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_choice text;
+  v_price integer;
+  v_total integer := 0;
+begin
+  if jsonb_typeof(p_choices) is distinct from 'array'
+    or jsonb_array_length(p_choices) <> 4 then
+    raise exception 'Each flight box must include exactly four mini loaves';
+  end if;
+
+  for v_choice in select value from jsonb_array_elements_text(p_choices)
+  loop
+    select p.mini_price_cents
+    into v_price
+    from public.products p
+    where p.id = v_choice::uuid
+      and p.active = true
+      and p.archived = false
+      and p.flight_eligible = true
+      and p.product_type = 'standard'
+      and p.mini_price_cents is not null;
+
+    if not found then
+      raise exception 'One of the selected mini loaves is not currently available';
+    end if;
+
+    v_total := v_total + v_price;
+  end loop;
+
+  return v_total;
+end;
+$$;
+
+create or replace function public.flight_box_description(
+  p_choices jsonb
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_description text;
+begin
+  perform public.flight_box_price(p_choices);
+
+  select string_agg(
+    'Loaf ' || choice.ordinality || ': ' ||
+      case
+        when p.display_group is not null and p.option_label is not null
+          then p.display_group || ' - ' || p.option_label
+        else p.name
+      end,
+    E'\n' order by choice.ordinality
+  )
+  into v_description
+  from jsonb_array_elements_text(p_choices) with ordinality as choice(product_id, ordinality)
+  join public.products p on p.id = choice.product_id::uuid;
+
+  return v_description;
+end;
+$$;
+
 create or replace function public.place_order(
   p_pickup_date_id uuid,
   p_customer_name text,
@@ -982,6 +1153,8 @@ declare
   v_reward_type text;
   v_reward_discount integer := 0;
   v_reward_status record;
+  v_product_type text;
+  v_item_note text;
 begin
   if p_payment_method not in ('Venmo', 'Zelle', 'PayPal', 'CashApp', 'CashAtPickup') then
     raise exception 'Invalid payment method';
@@ -1069,8 +1242,8 @@ begin
   loop
     v_quantity := (v_item->>'quantity')::integer;
 
-    select price_cents, capacity_units, shippable, tax_category, track_inventory, inventory_quantity
-    into v_price, v_capacity_units, v_shippable, v_tax_category, v_track_inventory, v_inventory_quantity
+    select price_cents, capacity_units, shippable, tax_category, track_inventory, inventory_quantity, product_type
+    into v_price, v_capacity_units, v_shippable, v_tax_category, v_track_inventory, v_inventory_quantity, v_product_type
     from products
     where id = (v_item->>'product_id')::uuid
       and active = true
@@ -1078,6 +1251,13 @@ begin
 
     if v_price is null then
       raise exception 'Invalid product';
+    end if;
+
+    if v_product_type = 'flight_box' then
+      if v_quantity <> 1 then
+        raise exception 'Each configured flight box must be submitted separately';
+      end if;
+      v_price := public.flight_box_price(v_item->'flight_choices');
     end if;
 
     if coalesce(v_track_inventory, false) and v_inventory_quantity < v_quantity then
@@ -1250,10 +1430,17 @@ begin
       (v_item->>'quantity')::integer
     );
 
-    select price_cents
-    into v_price
+    select price_cents, product_type
+    into v_price, v_product_type
     from products
     where id = (v_item->>'product_id')::uuid;
+
+    v_item_note := nullif(trim(coalesce(v_item->>'item_note', '')), '');
+
+    if v_product_type = 'flight_box' then
+      v_price := public.flight_box_price(v_item->'flight_choices');
+      v_item_note := concat_ws(E'\n', public.flight_box_description(v_item->'flight_choices'), v_item_note);
+    end if;
 
     insert into order_items (
       order_id,
@@ -1265,7 +1452,7 @@ begin
     values (
       v_order_id,
       (v_item->>'product_id')::uuid,
-      nullif(trim(coalesce(v_item->>'item_note', '')), ''),
+      v_item_note,
       (v_item->>'quantity')::integer,
       v_price
     );
@@ -2350,6 +2537,9 @@ returns table(
   tax_category text,
   track_inventory boolean,
   inventory_quantity integer,
+  product_type text,
+  flight_eligible boolean,
+  mini_price_cents integer,
   active boolean,
   archived boolean,
   sort_order integer
@@ -2378,6 +2568,9 @@ begin
     p.tax_category,
     p.track_inventory,
     p.inventory_quantity,
+    p.product_type,
+    p.flight_eligible,
+    p.mini_price_cents,
     p.active,
     p.archived,
     p.sort_order
@@ -2792,7 +2985,9 @@ create or replace function public.admin_update_product_flags(
   p_shippable boolean,
   p_tax_category text default 'home_bakery',
   p_track_inventory boolean default false,
-  p_inventory_quantity integer default 0
+  p_inventory_quantity integer default 0,
+  p_flight_eligible boolean default false,
+  p_mini_price_cents integer default null
 )
 returns table(
   saved_id uuid,
@@ -2800,7 +2995,9 @@ returns table(
   saved_shippable boolean,
   saved_tax_category text,
   saved_track_inventory boolean,
-  saved_inventory_quantity integer
+  saved_inventory_quantity integer,
+  saved_flight_eligible boolean,
+  saved_mini_price_cents integer
 )
 language plpgsql
 security definer
@@ -2819,13 +3016,23 @@ begin
     raise exception 'Inventory cannot be negative';
   end if;
 
+  if p_mini_price_cents is not null and p_mini_price_cents < 0 then
+    raise exception 'Mini price cannot be negative';
+  end if;
+
+  if coalesce(p_flight_eligible, false) and coalesce(p_mini_price_cents, 0) <= 0 then
+    raise exception 'Enter a mini price before offering this loaf in flights';
+  end if;
+
   update public.products as p
   set
     active = p_active,
     shippable = p_shippable,
     tax_category = p_tax_category,
     track_inventory = coalesce(p_track_inventory, false),
-    inventory_quantity = greatest(coalesce(p_inventory_quantity, 0), 0)
+    inventory_quantity = greatest(coalesce(p_inventory_quantity, 0), 0),
+    flight_eligible = case when p.product_type = 'flight_box' then false else coalesce(p_flight_eligible, false) end,
+    mini_price_cents = case when p.product_type = 'flight_box' then null else p_mini_price_cents end
   where p.id = p_product_id
   returning
     p.id,
@@ -2833,14 +3040,18 @@ begin
     p.shippable,
     p.tax_category,
     p.track_inventory,
-    p.inventory_quantity
+    p.inventory_quantity,
+    p.flight_eligible,
+    p.mini_price_cents
   into
     saved_id,
     saved_active,
     saved_shippable,
     saved_tax_category,
     saved_track_inventory,
-    saved_inventory_quantity;
+    saved_inventory_quantity,
+    saved_flight_eligible,
+    saved_mini_price_cents;
 
   if saved_id is null then
     raise exception 'Product not found';
@@ -3137,6 +3348,9 @@ grant execute on function public.calculate_order_totals(integer,integer,integer,
 revoke all on function public.bath_bomb_bundle_discount(jsonb) from public;
 grant execute on function public.bath_bomb_bundle_discount(jsonb) to anon, authenticated;
 
+revoke all on function public.flight_box_price(jsonb) from public;
+revoke all on function public.flight_box_description(jsonb) from public;
+
 revoke all on function public.generate_order_code() from public;
 grant execute on function public.generate_order_code() to anon, authenticated;
 
@@ -3181,8 +3395,8 @@ grant execute on function public.admin_list_products() to authenticated;
 
 revoke all on function public.adjust_product_inventory(uuid,integer) from public;
 
-revoke all on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer) from public;
-grant execute on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer) to authenticated;
+revoke all on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer,boolean,integer) from public;
+grant execute on function public.admin_update_product_flags(uuid,boolean,boolean,text,boolean,integer,boolean,integer) to authenticated;
 
 revoke all on function public.admin_set_product_archived(uuid,boolean) from public;
 grant execute on function public.admin_set_product_archived(uuid,boolean) to authenticated;
@@ -3219,3 +3433,5 @@ grant execute on function public.admin_remove_coupon(text) to authenticated;
 grant select on public.products to anon, authenticated;
 grant select on public.pickup_dates to anon, authenticated;
 grant select on public.pickup_date_status to anon, authenticated;
+
+notify pgrst, 'reload schema';

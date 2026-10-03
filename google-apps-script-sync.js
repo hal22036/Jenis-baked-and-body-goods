@@ -256,7 +256,7 @@ function replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCod
           `=IF(OR(D${itemRowNumber}="",F${itemRowNumber}=""),"",D${itemRowNumber}*F${itemRowNumber})`,
           `=IF(G${itemRowNumber}="","",G${itemRowNumber}-H${itemRowNumber})`,
           order.order_code,
-          orderNotes
+          [item.item_note, orderNotes].filter(Boolean).join(" | ")
         ]);
       });
     });

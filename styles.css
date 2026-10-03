@@ -450,6 +450,7 @@ h2 {
 }
 
 .option-card-heading,
+.flight-box-heading,
 .card-subtotal {
   display: flex;
   align-items: flex-start;
@@ -496,6 +497,62 @@ h2 {
 .option-row {
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+.flight-box-product {
+  align-content: start;
+}
+
+.flight-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flight-choice-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.flight-choice-grid select {
+  width: 100%;
+  min-width: 0;
+}
+
+.flight-add-button {
+  width: 100%;
+}
+
+.flight-box-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.flight-box-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.flight-box-summary > div:last-child {
+  display: grid;
+  align-content: start;
+  justify-items: end;
+  gap: 8px;
+}
+
+.flight-box-summary p,
+.invoice-item-note {
+  white-space: pre-line;
 }
 
 .product-description,
@@ -1561,6 +1618,14 @@ button.review-place-button:hover,
 
   .group-subtotal {
     text-align: left;
+  }
+
+  .flight-box-heading {
+    display: grid;
+  }
+
+  .flight-choice-grid {
+    grid-template-columns: 1fr;
   }
 
   .product-image {

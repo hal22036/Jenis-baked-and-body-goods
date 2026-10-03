@@ -84,6 +84,8 @@ const state = {
   selectedDate: null,
   quantities: {},
   itemNotes: {},
+  flightBoxes: [],
+  flightDraft: ["", "", "", ""],
   coupon: null,
   reward: null,
   rewardStatus: null,
@@ -249,11 +251,12 @@ function isPlaceholder(value) {
 }
 
 function selectedQuantity() {
-  return Object.values(state.quantities).reduce((sum, qty) => sum + Number(qty || 0), 0);
+  return Object.values(state.quantities).reduce((sum, qty) => sum + Number(qty || 0), 0)
+    + state.flightBoxes.length;
 }
 
 function capacityUnitsFor(product) {
-  return Number.isInteger(product.capacity_units) ? product.capacity_units : 1;
+  return Number.isInteger(product?.capacity_units) ? product.capacity_units : 1;
 }
 
 function productTracksInventory(product) {
@@ -275,15 +278,49 @@ function productHasInventory(product) {
 }
 
 function selectedCapacityUnits() {
-  return state.products.reduce((sum, product) => {
+  const standardUnits = state.products.reduce((sum, product) => {
     return sum + Number(state.quantities[product.id] || 0) * capacityUnitsFor(product);
   }, 0);
+
+  return standardUnits + state.flightBoxes.length * capacityUnitsFor(flightBoxProduct());
 }
 
 function selectedTotalCents() {
-  return state.products.reduce((sum, product) => {
+  const standardTotal = state.products.reduce((sum, product) => {
     return sum + Number(state.quantities[product.id] || 0) * Number(product.price_cents || 0);
   }, 0);
+
+  return standardTotal + state.flightBoxes.reduce((sum, box) => sum + flightBoxTotalCents(box), 0);
+}
+
+function isFlightBoxProduct(product) {
+  return cleanText(product?.product_type).toLowerCase() === "flight_box";
+}
+
+function flightBoxProduct() {
+  return state.products.find(isFlightBoxProduct) || null;
+}
+
+function flightEligibleProducts() {
+  return state.products
+    .filter(product => product.flight_eligible && Number.isFinite(Number(product.mini_price_cents)))
+    .sort((a, b) => compareText(displayNameFor(a), displayNameFor(b)));
+}
+
+function miniPriceFor(productId) {
+  const product = state.products.find(item => String(item.id) === String(productId));
+  return Number(product?.mini_price_cents || 0);
+}
+
+function flightBoxTotalCents(box) {
+  return (box?.choices || []).reduce((sum, productId) => sum + miniPriceFor(productId), 0);
+}
+
+function flightBoxChoiceSummary(box) {
+  return (box?.choices || []).map((productId, index) => {
+    const product = state.products.find(item => String(item.id) === String(productId));
+    return `Loaf ${index + 1}: ${displayNameFor(product) || "Not selected"}`;
+  }).join("\n");
 }
 
 function bathBombQuantity() {
@@ -372,10 +409,17 @@ function discountedSubtotalCents() {
 }
 
 function selectedSubtotalByTaxCategory(taxCategory) {
-  return state.products.reduce((sum, product) => {
+  const standardSubtotal = state.products.reduce((sum, product) => {
     if ((product.tax_category || "home_bakery") !== taxCategory) return sum;
     return sum + Number(state.quantities[product.id] || 0) * Number(product.price_cents || 0);
   }, 0);
+
+  const flightProduct = flightBoxProduct();
+  const flightSubtotal = flightProduct && (flightProduct.tax_category || "home_bakery") === taxCategory
+    ? state.flightBoxes.reduce((sum, box) => sum + flightBoxTotalCents(box), 0)
+    : 0;
+
+  return standardSubtotal + flightSubtotal;
 }
 
 function couponAppliesToLabel(value) {
@@ -400,9 +444,12 @@ function productsForActiveTab() {
 }
 
 function selectedFoodItems() {
-  return state.products.filter(product =>
+  const selected = state.products.filter(product =>
     productTabFor(product) === "baked-goods" && (state.quantities[product.id] || 0) > 0
   );
+
+  if (state.flightBoxes.length && flightBoxProduct()) selected.push(flightBoxProduct());
+  return selected;
 }
 
 function selectedBathBodyItems() {
@@ -813,9 +860,12 @@ function fulfillmentMethod() {
 }
 
 function selectedNonShippableItems() {
-  return state.products.filter(product =>
+  const selected = state.products.filter(product =>
     (state.quantities[product.id] || 0) > 0 && !productIsShippable(product)
   );
+
+  if (state.flightBoxes.length && flightBoxProduct()) selected.push(flightBoxProduct());
+  return selected;
 }
 
 function selectedShippableItems() {
@@ -972,6 +1022,8 @@ function saveOrderDraft() {
     activeProductTab: state.activeProductTab,
     quantities: state.quantities,
     itemNotes: state.itemNotes,
+    flightBoxes: state.flightBoxes,
+    flightDraft: state.flightDraft,
     customerName: document.querySelector("#customer-name").value,
     customerPhone: el.customerPhone.value,
     customerNotes: document.querySelector("#customer-notes").value,
@@ -1032,6 +1084,18 @@ function restoreOrderDraft() {
       state.itemNotes[productId] = note;
     }
   });
+
+  const eligibleFlightIds = new Set(flightEligibleProducts().map(product => String(product.id)));
+  state.flightBoxes = (draft.flightBoxes || [])
+    .filter(box => Array.isArray(box.choices) && box.choices.length === 4)
+    .filter(box => box.choices.every(productId => eligibleFlightIds.has(String(productId))))
+    .map(box => ({
+      id: cleanText(box.id) || `flight-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      choices: box.choices.map(String)
+    }));
+  state.flightDraft = Array.isArray(draft.flightDraft) && draft.flightDraft.length === 4
+    ? draft.flightDraft.map(productId => eligibleFlightIds.has(String(productId)) ? String(productId) : "")
+    : ["", "", "", ""];
 
   if (draft.selectedDateId) {
     state.selectedDate = state.dates.find(date => date.id === draft.selectedDateId) || null;
@@ -1430,6 +1494,136 @@ function renderProductTabs() {
   });
 }
 
+function flightChoiceOptions(selectedId) {
+  return [
+    '<option value="">Choose a mini loaf</option>',
+    ...flightEligibleProducts().map(product => `
+      <option value="${escapeAttribute(product.id)}" ${String(product.id) === String(selectedId) ? "selected" : ""}>
+        ${escapeHtml(displayNameFor(product))} - ${money(product.mini_price_cents)}
+      </option>
+    `)
+  ].join("");
+}
+
+function renderFlightBoxCard(card, product) {
+  const eligibleProducts = flightEligibleProducts();
+  const draftTotal = flightBoxTotalCents({ choices: state.flightDraft });
+  const draftComplete = state.flightDraft.every(Boolean);
+
+  card.className = "product flight-box-product";
+  card.innerHTML = `
+    ${productImageMarkup([product], product.name)}
+    <div class="flight-box-heading">
+      <div>
+        <h3>${escapeHtml(product.name)}</h3>
+        <span class="shipping-badge pickup-only">Pickup only</span>
+        ${productDescriptionMarkup(product.description)}
+      </div>
+      <div class="group-subtotal">
+        <span>This box</span>
+        <strong>${money(draftTotal)}</strong>
+      </div>
+    </div>
+    ${eligibleProducts.length ? `
+      <div class="flight-choice-grid">
+        ${state.flightDraft.map((productId, index) => `
+          <label>
+            Loaf ${index + 1}
+            <select data-flight-choice="${index}">
+              ${flightChoiceOptions(productId)}
+            </select>
+          </label>
+        `).join("")}
+      </div>
+      <button class="flight-add-button" type="button" data-add-flight ${draftComplete ? "" : "disabled"}>
+        Add flight box - ${money(draftTotal)}
+      </button>
+    ` : `
+      <p class="message error">Flight choices are not available yet. Add mini prices in the admin Products tab.</p>
+    `}
+    ${state.flightBoxes.length ? `
+      <div class="flight-box-list">
+        <strong>Added flight boxes</strong>
+        ${state.flightBoxes.map((box, index) => `
+          <div class="flight-box-summary">
+            <div>
+              <span>Flight ${index + 1}</span>
+              <p>${flightBoxChoiceSummary(box).split("\n").map(escapeHtml).join("<br>")}</p>
+            </div>
+            <div>
+              <strong>${money(flightBoxTotalCents(box))}</strong>
+              <button class="remove-cart-item" type="button" data-remove-flight="${escapeAttribute(box.id)}">Remove</button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
+  `;
+
+  card.querySelectorAll("[data-flight-choice]").forEach(select => {
+    select.addEventListener("change", () => {
+      state.flightDraft[Number(select.dataset.flightChoice)] = select.value;
+      state.orderTotals = null;
+      renderProducts();
+      updateSummary();
+      refreshCheckoutReview();
+      saveOrderDraft();
+    });
+  });
+
+  card.querySelector("[data-add-flight]")?.addEventListener("click", () => {
+    const remaining = remainingForSelectedDate();
+    const boxCapacity = capacityUnitsFor(product);
+
+    if (!state.selectedDate) {
+      setMessage("Choose a pickup date before adding a flight box.", "error");
+      return;
+    }
+
+    if (boxCapacity > 0 && selectedCapacityUnits() + boxCapacity > remaining) {
+      setMessage(`Only ${remaining} loaf spot${remaining === 1 ? "" : "s"} remain for this pickup date.`, "error");
+      return;
+    }
+
+    state.flightBoxes.push({
+      id: `flight-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      choices: state.flightDraft.slice()
+    });
+    state.flightDraft = ["", "", "", ""];
+    state.orderTotals = null;
+    if (state.coupon) {
+      resetCoupon("Coupon removed because the order changed. Apply it again before checkout.");
+    }
+    renderProducts();
+    updateSummary();
+    syncPageFlow();
+    refreshCheckoutReview();
+    saveOrderDraft();
+  });
+
+  card.querySelectorAll("[data-remove-flight]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.flightBoxes = state.flightBoxes.filter(box => box.id !== button.dataset.removeFlight);
+      state.orderTotals = null;
+      if (state.coupon) {
+        resetCoupon("Coupon removed because the order changed. Apply it again before checkout.");
+      }
+      renderProducts();
+      updateSummary();
+      refreshCheckoutReview();
+      saveOrderDraft();
+    });
+  });
+
+  card.querySelectorAll("[data-image-viewer-src]").forEach(button => {
+    button.addEventListener("click", () => {
+      openImageViewer(button.dataset.imageViewerSrc, button.dataset.imageViewerAlt || "Product image");
+    });
+  });
+
+  return card;
+}
+
 function renderProductCard(products) {
   const card = document.createElement("article");
   const sortedProducts = products
@@ -1439,6 +1633,10 @@ function renderProductCard(products) {
   const groupName = groupNameFor(primaryProduct);
   const isGrouped = products.length > 1 || Boolean(groupName);
   card.className = `product ${isGrouped ? "option-product" : ""}`;
+
+  if (isFlightBoxProduct(primaryProduct)) {
+    return renderFlightBoxCard(card, primaryProduct);
+  }
 
   if (!isGrouped) {
     card.innerHTML = `
@@ -1767,8 +1965,7 @@ el.form.addEventListener("submit", async event => {
 
 function selectedItemsWithDetails() {
   const productsById = new Map(state.products.map(product => [String(product.id), product]));
-
-  return Object.entries(state.quantities)
+  const standardItems = Object.entries(state.quantities)
     .map(([productId, quantity]) => ({
       product: productsById.get(String(productId)),
       quantity: Math.max(Number(quantity || 0), 0)
@@ -1784,8 +1981,26 @@ function selectedItemsWithDetails() {
       image_url: cleanText(product.image_url),
       shippable: productIsShippable(product),
       productTab: productTabFor(product)
-    }))
-    .sort((a, b) => compareText(a.name, b.name));
+    }));
+
+  const flightProduct = flightBoxProduct();
+  const flightItems = flightProduct
+    ? state.flightBoxes.map((box, index) => ({
+        product_id: flightProduct.id,
+        configuration_id: box.id,
+        name: `${flightProduct.name} ${index + 1}`,
+        quantity: 1,
+        item_note: flightBoxChoiceSummary(box),
+        price_cents: flightBoxTotalCents(box),
+        capacity_units: capacityUnitsFor(flightProduct),
+        image_url: cleanText(flightProduct.image_url),
+        shippable: false,
+        productTab: productTabFor(flightProduct),
+        flight_choices: box.choices.slice()
+      }))
+    : [];
+
+  return [...standardItems, ...flightItems].sort((a, b) => compareText(a.name, b.name));
 }
 
 function customerDetails() {
@@ -1847,13 +2062,21 @@ function renderCheckoutReview() {
           </span>
           ${item.item_note ? `<p class="item-note-display invoice-item-note"><strong>Item note:</strong> ${escapeHtml(item.item_note)}</p>` : ""}
           <div class="checkout-review-controls">
-            <div class="quantity" aria-label="${escapeAttribute(item.name)} checkout quantity">
-              <button type="button" data-review-action="minus" data-product-id="${item.product_id}" aria-label="Remove one ${escapeAttribute(item.name)}">-</button>
-              <span data-qty="${item.product_id}">${item.quantity}</span>
-              <button type="button" data-review-action="plus" data-product-id="${item.product_id}" aria-label="Add one ${escapeAttribute(item.name)}">+</button>
-            </div>
+            ${item.configuration_id ? "" : `
+              <div class="quantity" aria-label="${escapeAttribute(item.name)} checkout quantity">
+                <button type="button" data-review-action="minus" data-product-id="${item.product_id}" aria-label="Remove one ${escapeAttribute(item.name)}">-</button>
+                <span data-qty="${item.product_id}">${item.quantity}</span>
+                <button type="button" data-review-action="plus" data-product-id="${item.product_id}" aria-label="Add one ${escapeAttribute(item.name)}">+</button>
+              </div>
+            `}
             <strong>${money(item.quantity * item.price_cents)}</strong>
-            <button class="remove-cart-item" type="button" data-review-action="remove" data-product-id="${item.product_id}">
+            <button
+              class="remove-cart-item"
+              type="button"
+              ${item.configuration_id
+                ? `data-remove-flight="${escapeAttribute(item.configuration_id)}"`
+                : `data-review-action="remove" data-product-id="${item.product_id}"`}
+            >
               Remove
             </button>
           </div>
@@ -1907,6 +2130,20 @@ function renderCheckoutReview() {
     button.disabled = isQuantityButtonDisabled(button.dataset.reviewAction, product);
     button.addEventListener("click", () => updateProductQuantity(button.dataset.reviewAction, product));
   });
+
+  el.reviewContent.querySelectorAll("[data-remove-flight]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.flightBoxes = state.flightBoxes.filter(box => box.id !== button.dataset.removeFlight);
+      state.orderTotals = null;
+      if (state.coupon) {
+        resetCoupon("Coupon removed because the order changed. Apply it again before checkout.");
+      }
+      renderProducts();
+      updateSummary();
+      renderCheckoutReview();
+      saveOrderDraft();
+    });
+  });
 }
 
 el.editOrder?.addEventListener("click", () => {
@@ -1948,7 +2185,8 @@ async function submitReviewedOrder() {
   const items = selectedItemsWithDetails().map(item => ({
     product_id: item.product_id,
     quantity: item.quantity,
-    item_note: item.item_note
+    item_note: item.configuration_id ? "" : item.item_note,
+    ...(item.flight_choices ? { flight_choices: item.flight_choices } : {})
   }));
 
   state.isSubmitting = true;
@@ -2186,6 +2424,8 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
   el.tipAmount.value = "";
   state.quantities = {};
   state.itemNotes = {};
+  state.flightBoxes = [];
+  state.flightDraft = ["", "", "", ""];
   clearOrderDraft();
   updateShippingFields();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2196,6 +2436,8 @@ async function startAnotherOrder() {
   state.selectedDate = null;
   state.quantities = {};
   state.itemNotes = {};
+  state.flightBoxes = [];
+  state.flightDraft = ["", "", "", ""];
   state.orderTotals = null;
   resetCoupon();
   resetRewards();

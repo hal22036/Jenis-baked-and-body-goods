@@ -2128,6 +2128,7 @@ function renderProducts() {
                 ${product.capacity_units > 0 ? "- counts toward loaf capacity" : "- add-on item"}
                 ${product.shippable ? "- can ship" : "- pickup only"}
                 ${product.track_inventory ? `- ${product.inventory_quantity} in stock` : "- inventory not tracked"}
+                ${product.flight_eligible ? `- mini ${money(product.mini_price_cents)}` : ""}
                 - ${taxCategoryLabel(product.tax_category)}
               </p>
             </div>
@@ -2144,6 +2145,24 @@ function renderProducts() {
                 <span>Track stock</span>
                 <input type="checkbox" data-product-track-inventory ${product.track_inventory ? "checked" : ""} ${product.archived ? "disabled" : ""} />
               </label>
+              ${product.product_type !== "flight_box" && Number(product.capacity_units || 0) > 0 ? `
+                <label class="inline-check product-active-check">
+                  <span>Offer in flights</span>
+                  <input type="checkbox" data-product-flight-eligible ${product.flight_eligible ? "checked" : ""} ${product.archived ? "disabled" : ""} />
+                </label>
+                <label class="product-inventory-field">
+                  Mini price
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    data-product-mini-price
+                    data-previous-value="${centsToDollars(product.mini_price_cents || 0)}"
+                    value="${centsToDollars(product.mini_price_cents || 0)}"
+                    ${product.archived ? "disabled" : ""}
+                  />
+                </label>
+              ` : ""}
               <label class="product-inventory-field">
                 Inventory
                 <input
@@ -2178,7 +2197,7 @@ function renderProducts() {
     </section>
   `).join("");
 
-  el.productsList.querySelectorAll("[data-product-active], [data-product-shippable], [data-product-track-inventory], [data-product-inventory], [data-product-tax-category]").forEach(input => {
+  el.productsList.querySelectorAll("[data-product-active], [data-product-shippable], [data-product-track-inventory], [data-product-flight-eligible], [data-product-mini-price], [data-product-inventory], [data-product-tax-category]").forEach(input => {
     input.addEventListener("change", saveProductFlags);
   });
 
@@ -2265,7 +2284,11 @@ async function saveProductFlags(event) {
     p_shippable: row.querySelector("[data-product-shippable]").checked,
     p_tax_category: row.querySelector("[data-product-tax-category]").value,
     p_track_inventory: row.querySelector("[data-product-track-inventory]").checked,
-    p_inventory_quantity: Number(row.querySelector("[data-product-inventory]").value || 0)
+    p_inventory_quantity: Number(row.querySelector("[data-product-inventory]").value || 0),
+    p_flight_eligible: row.querySelector("[data-product-flight-eligible]")?.checked || false,
+    p_mini_price_cents: row.querySelector("[data-product-mini-price]")
+      ? dollarsToCents(row.querySelector("[data-product-mini-price]").value)
+      : null
   });
 
   input.disabled = false;
