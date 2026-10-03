@@ -1480,14 +1480,15 @@ function totalPrintedLabelCount(labels) {
 }
 
 function ingredientLabelsAreReady(labels) {
-  return labels.length > 0 && labels.every(label => String(label.netWeight || "").trim());
+  return labels.length > 0;
 }
 
 function ingredientLabelReviewText(labels) {
   if (!labels.length) return "Ingredient label not configured";
 
   const labelCount = `${labels.length} ingredient label${labels.length === 1 ? "" : "s"} will also print`;
-  return ingredientLabelsAreReady(labels) ? labelCount : `${labelCount} - net weight missing`;
+  const hasTbdWeight = labels.some(label => !String(label.netWeight || "").trim());
+  return hasTbdWeight ? `${labelCount} - missing weight prints as TBD` : labelCount;
 }
 
 function printSelectedLabels() {
@@ -1519,7 +1520,7 @@ function printLabels(labels) {
 }
 
 function printIngredientLabels(labels) {
-  const printableLabels = labels.filter(label => label && label.itemName && label.ingredients && label.netWeight);
+  const printableLabels = labels.filter(label => label && label.itemName && label.ingredients);
 
   if (!printableLabels.length) {
     setMessage(el.productAdminMessage, "No complete ingredient labels to print.", "error");
@@ -1567,7 +1568,7 @@ function ingredientLabelMarkup(label) {
       <strong class="dymo-ingredient-title">${escapeHtml(label.itemName)}</strong>
       <span class="dymo-ingredient-copy ${ingredientSizeClass}">${escapeHtml(ingredients)}</span>
       <span class="dymo-ingredient-footer">
-        ${label.netWeight ? `Net Wt. ${escapeHtml(label.netWeight)} | ` : ""}Home Produced<br />
+        Net Wt. ${escapeHtml(label.netWeight || "TBD")} | Home Produced<br />
         Jeni's Baked &amp; Body Goods | 801-602-8443
       </span>
     </section>
@@ -2391,8 +2392,8 @@ function ingredientLabelFallback(description) {
 
 function productLabelStatus(product) {
   if (!String(product.label_ingredients || ingredientLabelFallback(product.description)).trim()) return "Needs ingredients";
-  if (!String(product.label_net_weight || "").trim()) return "Needs full-size weight";
-  if (product.flight_eligible && !String(product.label_mini_net_weight || "").trim()) return "Needs mini weight";
+  if (!String(product.label_net_weight || "").trim()) return "Full-size weight: TBD";
+  if (product.flight_eligible && !String(product.label_mini_net_weight || "").trim()) return "Mini weight: TBD";
   return "Ready";
 }
 
@@ -2435,11 +2436,6 @@ function printProductIngredientLabel(event) {
 
   if (!ingredients) {
     setMessage(el.productAdminMessage, "Add ingredient and allergen text before printing.", "error");
-    return;
-  }
-
-  if (!netWeight) {
-    setMessage(el.productAdminMessage, `Add the ${printSize === "mini" ? "mini" : "full-size"} net weight before printing.`, "error");
     return;
   }
 
