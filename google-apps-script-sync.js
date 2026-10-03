@@ -93,9 +93,10 @@ function syncWebsiteOrders() {
   const spreadsheet = SpreadsheetApp.getActive();
   const ordersSheet = spreadsheet.getSheetByName("Orders");
   const orderItemsSheet = spreadsheet.getSheetByName("Order Items");
+  const flightComponentsSheet = spreadsheet.getSheetByName("Flight Box Components");
 
-  if (!ordersSheet || !orderItemsSheet) {
-    throw new Error("Could not find the Orders and Order Items sheets.");
+  if (!ordersSheet || !orderItemsSheet || !flightComponentsSheet) {
+    throw new Error("Could not find the Orders, Order Items, and Flight Box Components sheets.");
   }
 
   const websiteOrders = fetchWebsiteOrders();
@@ -112,6 +113,7 @@ function syncWebsiteOrders() {
   if (websiteOrders.length) {
     const orderRowsByCode = upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows);
     replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode);
+    replaceFlightBoxComponents(flightComponentsSheet, websiteOrders, orderRowsByCode);
 
     if (EMAIL_OWNER_NEW_ORDERS) {
       newOrders.forEach(sendOwnerOrderEmail);
@@ -272,6 +274,91 @@ function replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCod
   const targetRange = orderItemsSheet.getRange(startRow, 1, itemRows.length, 11);
   targetRange.clearDataValidations();
   targetRange.setValues(itemRows);
+}
+
+function replaceFlightBoxComponents(componentsSheet, websiteOrders, orderRowsByCode) {
+  const websiteOrderCodes = new Set(websiteOrders.map(order => order.order_code));
+  deleteExistingFlightComponents(componentsSheet, websiteOrderCodes);
+
+  const componentRows = [];
+  let nextRow = lastFilledRow(componentsSheet, 1) + 1;
+
+  websiteOrders
+    .filter(order => String(order.fulfillment_status || "").toLowerCase() !== "canceled")
+    .forEach(order => {
+      const orderRow = orderRowsByCode.get(order.order_code);
+      if (!orderRow) return;
+
+      let flightNumber = 0;
+      normalizeOrderItems(order.items).forEach(item => {
+        if (String(item.product_name || "").trim().toLowerCase() !== "mini loaf flight box") return;
+
+        flightNumber += 1;
+        const flightQuantity = Math.max(1, Number(item.quantity || 1) || 1);
+        const components = parseFlightBoxComponents(item);
+
+        components.forEach(component => {
+          const rowNumber = nextRow++;
+          componentRows.push([
+            orderRow.orderId,
+            localDate(order.pickup_date),
+            order.order_code,
+            `Flight ${flightNumber}`,
+            component.slot,
+            component.name,
+            flightQuantity,
+            component.salePrice,
+            `=IF(F${rowNumber}="","",IFERROR(INDEX(Recipes!$E:$E,MATCH(F${rowNumber},Recipes!$A:$A,0)),""))`,
+            `=IF(OR(G${rowNumber}="",I${rowNumber}=""),"",G${rowNumber}*I${rowNumber}/3)`,
+            `=IF(OR(G${rowNumber}="",H${rowNumber}="",J${rowNumber}=""),"",G${rowNumber}*H${rowNumber}-J${rowNumber})`,
+            "Estimated mini cost is quantity times one-third of the matching full-loaf recipe cost."
+          ]);
+        });
+      });
+    });
+
+  if (!componentRows.length) {
+    Logger.log("No flight box component rows to write.");
+    return;
+  }
+
+  const startRow = nextRow - componentRows.length;
+  ensureSheetHasRange(componentsSheet, startRow, 1, componentRows.length, 12);
+  componentsSheet.getRange(startRow, 1, componentRows.length, 12).setValues(componentRows);
+  Logger.log(`Wrote ${componentRows.length} flight box component row${componentRows.length === 1 ? "" : "s"}.`);
+}
+
+function parseFlightBoxComponents(item) {
+  const lines = String(item.item_note || "").split(/\r?\n/);
+  const fallbackPrice = centsToDollars(Number(item.unit_price_cents || 0) / 4);
+
+  return lines.map(line => {
+    const match = line.trim().match(/^Loaf\s+(\d+):\s+(.+?)(?:\s+\[\$(\d+(?:\.\d{1,2})?)\])?$/i);
+    if (!match) return null;
+
+    return {
+      slot: Number(match[1]),
+      name: match[2].trim(),
+      salePrice: match[3] ? Number(match[3]) : fallbackPrice
+    };
+  }).filter(Boolean);
+}
+
+function deleteExistingFlightComponents(sheet, websiteOrderCodes) {
+  const lastRow = lastFilledRow(sheet, 1);
+  if (lastRow < 2 || !websiteOrderCodes.size) return;
+
+  const orderCodes = sheet.getRange(2, 3, lastRow - 1, 1).getValues().flat();
+  let deleted = 0;
+
+  for (let index = orderCodes.length - 1; index >= 0; index -= 1) {
+    if (websiteOrderCodes.has(String(orderCodes[index] || "").trim())) {
+      sheet.deleteRow(index + 2);
+      deleted += 1;
+    }
+  }
+
+  Logger.log(`Deleted ${deleted} existing flight component row${deleted === 1 ? "" : "s"}.`);
 }
 
 function ensureSheetHasRange(sheet, startRow, startColumn, rowCount, columnCount) {

@@ -134,6 +134,8 @@ The storefront also supports a `Mini Loaf Flight Box` containing four customer-s
 
 Each configured box is saved as one order item. Its four loaf choices are stored in the item note, shown on invoices, and included in the Google Sheet sync notes.
 
+The Google Sheet sync also writes one row per selected mini loaf to the `Flight Box Components` tab. This keeps the sale itself as one flight box while providing four production rows with the selected recipe, mini sale price, estimated mini cost, and estimated profit. The mini cost is estimated as one-third of the matching full-loaf cost from the `Recipes` tab; add mini-specific packaging costs separately when those costs are known. Older flight orders without per-mini prices use one-fourth of the box price for each selection.
+
 Each flight box contains four minis and reserves one loaf spot in the pickup-date total.
 
 The storefront sorts product cards inside each category from lowest price to highest price, then alphabetically when prices match. Grouped choices use `sort_order` first, then `option_label`, so you can place `Plain` before flavored granola or `2 oz` before larger sizes.

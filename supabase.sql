@@ -1094,12 +1094,8 @@ begin
   perform public.flight_box_price(p_choices);
 
   select string_agg(
-    'Loaf ' || choice.ordinality || ': ' ||
-      case
-        when p.display_group is not null and p.option_label is not null
-          then p.display_group || ' - ' || p.option_label
-        else p.name
-      end,
+    'Loaf ' || choice.ordinality || ': ' || p.name ||
+      ' [$' || to_char(p.mini_price_cents::numeric / 100, 'FM9999990.00') || ']',
     E'\n' order by choice.ordinality
   )
   into v_description
