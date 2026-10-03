@@ -309,9 +309,9 @@ function replaceFlightBoxComponents(componentsSheet, websiteOrders, orderRowsByC
             flightQuantity,
             component.salePrice,
             `=IF(F${rowNumber}="","",IFERROR(INDEX(Recipes!$E:$E,MATCH(F${rowNumber},Recipes!$A:$A,0)),""))`,
-            `=IF(OR(G${rowNumber}="",I${rowNumber}=""),"",G${rowNumber}*I${rowNumber}/3)`,
+            `=IF(OR(G${rowNumber}="",I${rowNumber}=""),"",G${rowNumber}*(I${rowNumber}/3+IFERROR(INDEX(Ingredients!$E:$E,MATCH("Mini Loaf Flight Box Packaging",Ingredients!$A:$A,0)),0)/4))`,
             `=IF(OR(G${rowNumber}="",H${rowNumber}="",J${rowNumber}=""),"",G${rowNumber}*H${rowNumber}-J${rowNumber})`,
-            "Estimated mini cost is quantity times one-third of the matching full-loaf recipe cost."
+            "Estimated cost includes one-third of the matching full-loaf recipe cost plus one-fourth of the flight box packaging cost."
           ]);
         });
       });
