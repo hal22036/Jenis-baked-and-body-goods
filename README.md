@@ -254,7 +254,7 @@ The admin page can:
 
 Use archive instead of delete so order history is not lost accidentally.
 
-Ingredient labels are maintained under Admin -> Products -> Ingredient label. Each product can store its ingredient/allergen statement, full-size net weight, and a separate mini net weight for flight boxes. The first database migration copies reviewed food ingredient descriptions into the label field and imports known full-loaf weights from the existing DYMO labels. In the label review window, each selected order label shows how many ingredient labels will print with it. Products without configured ingredient text print only the order label and are marked as missing in the review window. The same product editor can print any number of full-size or mini ingredient labels without an order.
+Ingredient labels are maintained under Admin -> Products -> Ingredient label. Each product can store its ingredient/allergen statement, full-size net weight, and a separate mini net weight for flight boxes. The first database migration copies reviewed food ingredient descriptions into the label field and imports known full-loaf weights from the existing DYMO labels. In the label review window, each selected order label shows how many ingredient labels will print with it. Products without configured ingredient text print only the order label and are marked as missing in the review window. The same product editor can print any number of full-size or mini ingredient labels without an order. The flight box product does not have its own ingredient label; an ordered flight prints one ingredient label for each of its four selected mini loaf flavors.
 
 ## Capacity Protection
 

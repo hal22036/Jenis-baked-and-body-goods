@@ -1034,6 +1034,15 @@
   padding-top: 10px;
 }
 
+.flight-box-label-note {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .product-label-editor summary {
   display: flex;
   align-items: center;

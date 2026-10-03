@@ -2316,6 +2316,11 @@ function renderProducts() {
                 ${product.archived ? "Restore product" : "Archive product"}
               </button>
             </div>
+            ${product.product_type === "flight_box" ? `
+              <div class="flight-box-label-note">
+                Ingredient labels come from the four mini loaf flavors selected for each flight box order.
+              </div>
+            ` : `
             <details class="product-label-editor">
               <summary>
                 Ingredient label
@@ -2355,6 +2360,7 @@ function renderProducts() {
                 </div>
               </div>
             </details>
+            `}
           </article>
         `).join("")}
       </div>
