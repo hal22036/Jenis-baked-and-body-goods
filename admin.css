@@ -522,9 +522,9 @@
 
 .dymo-ingredient-label {
   display: grid;
-  grid-template-rows: 0.2in minmax(0, 1fr) 0.18in;
+  grid-template-rows: 0.185in minmax(0, 1fr) 0.17in;
   gap: 0;
-  padding: 0.025in 0.05in;
+  padding: 0.015in 0.05in 0.06in;
   font-family: "Times New Roman", serif;
 }
 
