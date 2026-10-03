@@ -113,8 +113,8 @@ function syncWebsiteOrders() {
 
   if (websiteOrders.length) {
     const orderRowsByCode = upsertOrdersToSheet(ordersSheet, websiteOrders, existingRows);
-    replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode);
     replaceFlightBoxComponents(flightComponentsSheet, websiteOrders, orderRowsByCode);
+    replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCode);
     syncOrderItemVisibilityToOrders(ordersSheet, orderItemsSheet);
 
     if (EMAIL_OWNER_NEW_ORDERS) {
@@ -812,7 +812,11 @@ function lastFilledRow(sheet, column) {
 }
 
 function productCostFormula(row) {
-  return `=IF(OR($B${row}="",$C${row}=""),"",IFERROR(INDEX(FILTER('Price History'!$E$2:$E$501,('Price History'!$A$2:$A$501=$C${row})*('Price History'!$B$2:$B$501<=$B${row})*(('Price History'!$C$2:$C$501="")+('Price History'!$C$2:$C$501>=$B${row}))),1),""))`;
+  const flightNumber = `COUNTIFS($J$2:$J${row},$J${row},$C$2:$C${row},"Mini Loaf Flight Box")`;
+  const flightCost = `SUMIFS('Flight Box Components'!$J:$J,'Flight Box Components'!$C:$C,$J${row},'Flight Box Components'!$D:$D,"Flight "&${flightNumber})/MAX(1,$D${row})`;
+  const standardCost = `INDEX(FILTER('Price History'!$E$2:$E$501,('Price History'!$A$2:$A$501=$C${row})*('Price History'!$B$2:$B$501<=$B${row})*(('Price History'!$C$2:$C$501="")+('Price History'!$C$2:$C$501>=$B${row}))),1)`;
+
+  return `=IF(OR($B${row}="",$C${row}=""),"",IFERROR(IF(LOWER(TRIM($C${row}))="mini loaf flight box",${flightCost},${standardCost}),""))`;
 }
 
 function localDate(dateString) {
