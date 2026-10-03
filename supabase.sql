@@ -574,7 +574,7 @@ select
   'Choose four mini sourdough loaves. The box price updates with your flavor selections.',
   0,
   1,
-  'Other Delicious Treats',
+  'Specials',
   false,
   'home_bakery',
   'flight_box',
@@ -592,7 +592,7 @@ set
   description = 'Choose four mini sourdough loaves. The box price updates with your flavor selections.',
   price_cents = 0,
   capacity_units = 1,
-  category = 'Other Delicious Treats',
+  category = 'Specials',
   shippable = false,
   tax_category = 'home_bakery',
   flight_eligible = false,
@@ -616,7 +616,15 @@ where product_type = 'standard'
   and capacity_units > 0
   and tax_category = 'home_bakery'
   and category in ('Everyday','Sweet','Savory','Turn Up the Heat')
+  and lower(name) not like '%focaccia%'
   and mini_price_cents is null;
+
+-- Focaccia is sold in pans and is not available as a mini-loaf flight choice.
+update public.products
+set
+  flight_eligible = false,
+  mini_price_cents = null
+where lower(name) like '%focaccia%';
 
 -- Pickup dates are intentionally not seeded automatically.
 -- Add only the Fridays you want to offer in Table Editor -> pickup_dates.

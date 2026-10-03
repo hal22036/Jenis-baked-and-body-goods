@@ -18,8 +18,18 @@ const state = {
 const PRODUCT_ADMIN_TABS = [
   {
     id: "baked-goods",
-    label: "Baked Goods",
-    categories: ["Everyday", "Sweet", "Savory", "Turn Up the Heat", "Other Delicious Treats"]
+    label: "Breads",
+    categories: ["Everyday", "Sweet", "Savory", "Turn Up the Heat"]
+  },
+  {
+    id: "specials",
+    label: "Specials",
+    categories: ["Specials"]
+  },
+  {
+    id: "other-treats",
+    label: "Other Delicious Treats",
+    categories: ["Other Delicious Treats"]
   },
   {
     id: "bath-body",
@@ -2099,8 +2109,16 @@ function renderProducts() {
 
   renderProductAdminTabs();
 
+  const activeTab = PRODUCT_ADMIN_TABS.find(tab => tab.id === state.activeProductAdminTab);
+  const categoryOrder = activeTab?.categories || [];
   const visibleProducts = productsForActiveAdminTab()
-    .filter(product => el.includeArchivedProducts.checked || !product.archived);
+    .filter(product => el.includeArchivedProducts.checked || !product.archived)
+    .sort((a, b) => {
+      const aIndex = categoryOrder.indexOf(productCategory(a));
+      const bIndex = categoryOrder.indexOf(productCategory(b));
+      return (aIndex === -1 ? categoryOrder.length : aIndex)
+        - (bIndex === -1 ? categoryOrder.length : bIndex);
+    });
 
   if (!visibleProducts.length) {
     el.productsList.innerHTML = "<p class=\"muted\">No products to show in this section.</p>";

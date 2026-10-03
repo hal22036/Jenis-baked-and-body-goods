@@ -165,6 +165,7 @@ Use `category` to group the order screen. Built-in category order:
 - `Sweet`
 - `Savory`
 - `Turn Up the Heat`
+- `Specials`
 - `Other Delicious Treats`
 
 Use `display_group` and `option_label` when several product rows should appear in one card with separate choices:

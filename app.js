@@ -29,6 +29,7 @@ const STORE_SETTINGS = {
     "Sweet",
     "Savory",
     "Turn Up the Heat",
+    "Specials",
     "Other Delicious Treats",
     "Bath & Body"
   ],
@@ -36,7 +37,7 @@ const STORE_SETTINGS = {
     {
       id: "baked-goods",
       label: "Baked Goods",
-      categories: ["Everyday", "Sweet", "Savory", "Turn Up the Heat", "Other Delicious Treats"]
+      categories: ["Everyday", "Sweet", "Savory", "Turn Up the Heat", "Specials", "Other Delicious Treats"]
     },
     {
       id: "bath-body",
@@ -476,6 +477,8 @@ function availableProductTabs() {
 }
 
 function categorySortIndex(category) {
+  if (category === "Other Delicious Treats") return Number.MAX_SAFE_INTEGER;
+
   const index = STORE_SETTINGS.categoryOrder.indexOf(category);
   return index === -1 ? STORE_SETTINGS.categoryOrder.length : index;
 }
