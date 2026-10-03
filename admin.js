@@ -1356,7 +1356,7 @@ function ingredientLabelsForOrderItem(item) {
   if (!ingredients) return [];
 
   return [{
-    itemName: adminItemName(item),
+    itemName: ingredientLabelProductTitle(adminItemName(item), item),
     ingredients,
     netWeight: String(item.label_net_weight || "").trim()
   }];
@@ -1370,7 +1370,10 @@ function flightBoxIngredientLabels(itemNote) {
     .map(match => productForIngredientLabelName(match[1]))
     .filter(Boolean)
     .map(product => ({
-      itemName: `${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name} Mini`,
+      itemName: `${ingredientLabelProductTitle(
+        product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name,
+        product
+      )} Mini`,
       ingredients: String(product.label_ingredients || "").trim() || ingredientLabelFallback(product.description),
       netWeight: String(product.label_mini_net_weight || "").trim()
     }))
@@ -1557,22 +1560,48 @@ function orderLabelMarkup(label) {
 
 function ingredientLabelMarkup(label) {
   const ingredients = String(label.ingredients || "").trim();
-  const ingredientSizeClass = ingredients.length > 520
-    ? "is-very-long"
-    : ingredients.length > 390
-      ? "is-long"
-      : "";
+  const title = String(label.itemName || "Product").trim();
+  const titleSize = ingredientLabelTitleFontSize(title);
+  const copySize = ingredientLabelCopyFontSize(ingredients);
 
   return `
     <section class="dymo-label dymo-ingredient-label">
-      <strong class="dymo-ingredient-title">${escapeHtml(label.itemName)}</strong>
-      <span class="dymo-ingredient-copy ${ingredientSizeClass}">${escapeHtml(ingredients)}</span>
+      <strong class="dymo-ingredient-title" style="font-size: ${titleSize}pt">${escapeHtml(title)}</strong>
+      <span class="dymo-ingredient-copy" style="font-size: ${copySize}pt">${escapeHtml(ingredients)}</span>
       <span class="dymo-ingredient-footer">
         Net Wt. ${escapeHtml(label.netWeight || "TBD")} | Home Produced<br />
         Jeni's Baked &amp; Body Goods | 801-602-8443
       </span>
     </section>
   `;
+}
+
+function ingredientLabelTitleFontSize(title) {
+  if (title.length <= 24) return 10;
+  if (title.length <= 36) return 9;
+  if (title.length <= 48) return 8;
+  return 7.2;
+}
+
+function ingredientLabelCopyFontSize(ingredients) {
+  if (ingredients.length <= 190) return 6.8;
+  if (ingredients.length <= 250) return 6.2;
+  if (ingredients.length <= 320) return 5.7;
+  if (ingredients.length <= 400) return 5.1;
+  if (ingredients.length <= 500) return 4.6;
+  if (ingredients.length <= 620) return 4.1;
+  return 3.7;
+}
+
+function ingredientLabelProductTitle(name, product) {
+  const title = String(name || "Product").trim();
+  const isBread = Number(product?.capacity_units || 0) > 0
+    && product?.category !== "Other Delicious Treats"
+    && product?.product_type !== "flight_box";
+
+  if (!isBread || /\bsourdough\b/i.test(title)) return title;
+  if (/\bfocaccia\b/i.test(title)) return title.replace(/\bfocaccia\b/i, "Sourdough Focaccia");
+  return `${title} Sourdough`;
 }
 
 function breakdownTableMarkup(title, items) {
@@ -2440,7 +2469,10 @@ function printProductIngredientLabel(event) {
   }
 
   const itemName = product
-    ? `${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name}${printSize === "mini" ? " Mini" : ""}`
+    ? `${ingredientLabelProductTitle(
+      product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name,
+      product
+    )}${printSize === "mini" ? " Mini" : ""}`
     : "Product";
   const labels = Array.from({ length: copies }, () => ({ itemName, ingredients, netWeight }));
 

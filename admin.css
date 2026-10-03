@@ -521,34 +521,22 @@
 
 .dymo-ingredient-title {
   display: block;
-  overflow: hidden;
-  font-size: 9pt;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 0 auto;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dymo-ingredient-copy {
-  display: -webkit-box;
+  display: grid;
+  place-content: center;
   min-height: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  font-size: 5.7pt;
   line-height: 1.02;
+  overflow-wrap: anywhere;
   text-align: center;
   white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 8;
-}
-
-.dymo-ingredient-copy.is-long {
-  font-size: 5.1pt;
-  -webkit-line-clamp: 9;
-}
-
-.dymo-ingredient-copy.is-very-long {
-  font-size: 4.6pt;
-  -webkit-line-clamp: 10;
 }
 
 .dymo-ingredient-footer {
