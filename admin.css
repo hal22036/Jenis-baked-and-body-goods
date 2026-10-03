@@ -1051,7 +1051,7 @@
 
 .product-label-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px) minmax(150px, 220px) auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   align-items: end;
   gap: 10px;
   padding-top: 12px;
@@ -1071,6 +1071,13 @@
   width: 100%;
   min-height: 112px;
   resize: vertical;
+}
+
+.product-label-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .product-inventory-field {
@@ -1244,6 +1251,11 @@
 
   .product-label-ingredients-field {
     grid-column: auto;
+  }
+
+  .product-label-actions {
+    grid-column: auto;
+    display: grid;
   }
 
   .order-summary {

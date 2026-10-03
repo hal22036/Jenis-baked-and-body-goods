@@ -1510,10 +1510,27 @@ function printLabels(labels) {
     return;
   }
 
-  el.labelPrintRoot.innerHTML = printableLabels.flatMap(label => [
+  const markup = printableLabels.flatMap(label => [
     orderLabelMarkup(label),
     ...(label.ingredientLabels || []).map(ingredientLabelMarkup)
   ]).join("");
+
+  printLabelMarkup(markup);
+}
+
+function printIngredientLabels(labels) {
+  const printableLabels = labels.filter(label => label && label.itemName && label.ingredients && label.netWeight);
+
+  if (!printableLabels.length) {
+    setMessage(el.productAdminMessage, "No complete ingredient labels to print.", "error");
+    return;
+  }
+
+  printLabelMarkup(printableLabels.map(ingredientLabelMarkup).join(""));
+}
+
+function printLabelMarkup(markup) {
+  el.labelPrintRoot.innerHTML = markup;
 
   document.body.classList.add("printing-labels");
   window.print();
@@ -2319,7 +2336,23 @@ function renderProducts() {
                     <input type="text" data-product-label-mini-net-weight value="${escapeAttribute(product.label_mini_net_weight || "")}" placeholder="Enter actual mini weight" />
                   </label>
                 ` : `<input type="hidden" data-product-label-mini-net-weight value="${escapeAttribute(product.label_mini_net_weight || "")}" />`}
-                <button class="secondary-button compact-button" type="button" data-save-product-label>Save ingredient label</button>
+                ${product.flight_eligible ? `
+                  <label>
+                    Print size
+                    <select data-product-label-print-size>
+                      <option value="full">Full-size</option>
+                      <option value="mini">Mini</option>
+                    </select>
+                  </label>
+                ` : `<input type="hidden" data-product-label-print-size value="full" />`}
+                <label>
+                  Copies
+                  <input type="number" data-product-label-copies min="1" max="100" step="1" value="1" />
+                </label>
+                <div class="product-label-actions">
+                  <button class="secondary-button compact-button" type="button" data-save-product-label>Save</button>
+                  <button class="compact-button" type="button" data-print-product-label>Print ingredient label</button>
+                </div>
               </div>
             </details>
           </article>
@@ -2338,6 +2371,10 @@ function renderProducts() {
 
   el.productsList.querySelectorAll("[data-save-product-label]").forEach(button => {
     button.addEventListener("click", saveProductLabel);
+  });
+
+  el.productsList.querySelectorAll("[data-print-product-label]").forEach(button => {
+    button.addEventListener("click", printProductIngredientLabel);
   });
 }
 
@@ -2377,6 +2414,35 @@ async function saveProductLabel(event) {
 
   setMessage(el.productAdminMessage, `${productName} ingredient label saved.`, "success");
   await Promise.all([loadProducts(), loadOrders()]);
+}
+
+function printProductIngredientLabel(event) {
+  const button = event.currentTarget;
+  const row = button.closest("[data-product-id]");
+  const product = state.products.find(item => item.id === row.dataset.productId);
+  const ingredients = row.querySelector("[data-product-label-ingredients]").value.trim();
+  const printSize = row.querySelector("[data-product-label-print-size]").value;
+  const copies = Math.min(100, Math.max(1, Math.floor(Number(row.querySelector("[data-product-label-copies]").value) || 1)));
+  const netWeight = printSize === "mini"
+    ? row.querySelector("[data-product-label-mini-net-weight]").value.trim()
+    : row.querySelector("[data-product-label-net-weight]").value.trim();
+
+  if (!ingredients) {
+    setMessage(el.productAdminMessage, "Add ingredient and allergen text before printing.", "error");
+    return;
+  }
+
+  if (!netWeight) {
+    setMessage(el.productAdminMessage, `Add the ${printSize === "mini" ? "mini" : "full-size"} net weight before printing.`, "error");
+    return;
+  }
+
+  const itemName = product
+    ? `${product.display_group && product.option_label ? `${product.display_group} - ${product.option_label}` : product.name}${printSize === "mini" ? " Mini" : ""}`
+    : "Product";
+  const labels = Array.from({ length: copies }, () => ({ itemName, ingredients, netWeight }));
+
+  printIngredientLabels(labels);
 }
 
 async function setProductArchived(event) {
