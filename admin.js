@@ -1569,11 +1569,31 @@ function printLabelMarkup(markup) {
   el.labelPrintRoot.innerHTML = markup;
 
   document.body.classList.add("printing-labels");
+  el.labelPrintRoot.classList.add("is-measuring");
+  fitIngredientLabelTitles();
+  el.labelPrintRoot.classList.remove("is-measuring");
   window.print();
   window.setTimeout(() => {
     document.body.classList.remove("printing-labels");
     el.labelPrintRoot.innerHTML = "";
   }, 500);
+}
+
+function fitIngredientLabelTitles() {
+  el.labelPrintRoot.querySelectorAll(".dymo-ingredient-title").forEach(title => {
+    let fontSize = Number.parseFloat(title.style.fontSize) || 12.5;
+    const minimumFontSize = 6;
+
+    while (fontSize > minimumFontSize && ingredientLabelTitleOverflows(title)) {
+      fontSize = Math.max(minimumFontSize, fontSize - 0.25);
+      title.style.fontSize = `${fontSize}pt`;
+    }
+  });
+}
+
+function ingredientLabelTitleOverflows(title) {
+  return title.scrollHeight > title.clientHeight + 1
+    || title.scrollWidth > title.clientWidth + 1;
 }
 
 function orderLabelMarkup(label) {

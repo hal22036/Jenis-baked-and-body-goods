@@ -441,6 +441,14 @@
   display: none;
 }
 
+.label-print-root.is-measuring {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  display: block;
+  visibility: hidden;
+}
+
 .dymo-label {
   display: flex;
   flex-direction: column;
