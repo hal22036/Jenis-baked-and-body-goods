@@ -635,7 +635,10 @@ function customerInvoiceHtml(order) {
 function itemsHtml(order) {
   const rows = (order.items || []).map(item => `
     <tr>
-      <td>${escapeHtml(item.product_name || "")}</td>
+      <td>
+        ${escapeHtml(item.product_name || "")}
+        ${emailItemDetailsHtml(item)}
+      </td>
       <td style="text-align:center;">${Number(item.quantity || 0)}</td>
       <td style="text-align:right;">${money(item.unit_price_cents)}</td>
       <td style="text-align:right;">${money(Number(item.quantity || 0) * Number(item.unit_price_cents || 0))}</td>
@@ -655,6 +658,24 @@ function itemsHtml(order) {
       <tbody>${rows}</tbody>
     </table>
   `;
+}
+
+function emailItemDetailsHtml(item) {
+  const flightComponents = parseFlightBoxComponents(item);
+
+  if (flightComponents.length) {
+    return `
+      <div style="margin-top:5px;color:#555555;font-size:13px;line-height:1.45;">
+        <strong>Flight box includes:</strong><br />
+        ${flightComponents.map(component => `&#8226; ${escapeHtml(component.name)}`).join("<br />")}
+      </div>
+    `;
+  }
+
+  const itemNote = String(item.item_note || "").trim();
+  return itemNote
+    ? `<div style="margin-top:5px;color:#555555;font-size:13px;line-height:1.45;"><strong>Item note:</strong> ${escapeHtml(itemNote).replace(/\r?\n/g, "<br />")}</div>`
+    : "";
 }
 
 function plainOrderText(order) {
@@ -706,7 +727,19 @@ function plainItemsText(order) {
   return (order.items || [])
     .map(item => {
       const quantity = Number(item.quantity || 0);
-      return `${quantity} x ${item.product_name || ""} - ${money(quantity * Number(item.unit_price_cents || 0))}`;
+      const itemLine = `${quantity} x ${item.product_name || ""} - ${money(quantity * Number(item.unit_price_cents || 0))}`;
+      const flightComponents = parseFlightBoxComponents(item);
+
+      if (flightComponents.length) {
+        return [
+          itemLine,
+          "  Flight box includes:",
+          ...flightComponents.map(component => `  - ${component.name}`)
+        ].join("\n");
+      }
+
+      const itemNote = String(item.item_note || "").trim();
+      return itemNote ? `${itemLine}\n  Item note: ${itemNote}` : itemLine;
     })
     .join("\n");
 }
