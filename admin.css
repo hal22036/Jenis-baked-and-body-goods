@@ -585,8 +585,27 @@
 }
 
 .label-review-actions {
+  flex-wrap: wrap;
   justify-content: flex-start;
   margin-bottom: 12px;
+}
+
+.include-ingredient-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fffdf9;
+  font-weight: 800;
+}
+
+.include-ingredient-labels input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 .label-review-list {
@@ -629,6 +648,10 @@
 
 .label-review-item .ingredient-label-status.is-missing {
   color: #9b3a2d;
+}
+
+.label-review-item .ingredient-label-status.is-excluded {
+  color: var(--muted);
 }
 
 .label-note-field {
@@ -1362,6 +1385,11 @@
   .label-review-header,
   .label-review-footer {
     display: grid;
+  }
+
+  .include-ingredient-labels {
+    width: 100%;
+    margin-left: 0;
   }
 }
 

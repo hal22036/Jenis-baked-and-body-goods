@@ -67,6 +67,7 @@ const el = {
   cancelLabelPrint: document.querySelector("#cancel-label-print"),
   selectAllLabels: document.querySelector("#select-all-labels"),
   clearAllLabels: document.querySelector("#clear-all-labels"),
+  includeIngredientLabels: document.querySelector("#include-ingredient-labels"),
   printSelectedLabels: document.querySelector("#print-selected-labels"),
   labelPrintRoot: document.querySelector("#label-print-root"),
   ordersList: document.querySelector("#orders-list"),
@@ -364,6 +365,7 @@ el.closeLabelReview.addEventListener("click", closeLabelReview);
 el.cancelLabelPrint.addEventListener("click", closeLabelReview);
 el.selectAllLabels.addEventListener("click", () => setLabelReviewChecked(true));
 el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
+el.includeIngredientLabels.addEventListener("change", updateLabelReviewCount);
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
 el.addManualItem.addEventListener("click", () => addManualItemRow());
@@ -1415,6 +1417,7 @@ function printOrderLabels(event) {
 
 function openLabelReview(labels, title) {
   state.pendingPrintLabels = labels;
+  el.includeIngredientLabels.checked = true;
   el.labelReviewTitle.textContent = title;
   el.labelReviewList.innerHTML = labels.map((label, index) => `
     <label class="label-review-item">
@@ -1423,7 +1426,10 @@ function openLabelReview(labels, title) {
         <strong>${escapeHtml(label.customerName)}</strong>
         ${escapeHtml(label.itemName)}
         <small>${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</small>
-        <small class="ingredient-label-status ${ingredientLabelsAreReady(label.ingredientLabels) ? "is-ready" : "is-missing"}">
+        <small
+          class="ingredient-label-status ${ingredientLabelsAreReady(label.ingredientLabels) ? "is-ready" : "is-missing"}"
+          data-ingredient-label-index="${index}"
+        >
           ${ingredientLabelReviewText(label.ingredientLabels)}
         </small>
       </span>
@@ -1459,17 +1465,34 @@ function setLabelReviewChecked(checked) {
 }
 
 function selectedReviewLabels() {
+  const includeIngredientLabels = el.includeIngredientLabels.checked;
   return [...el.labelReviewList.querySelectorAll("[data-label-index]:checked")]
     .map(input => {
       const index = Number(input.dataset.labelIndex);
       const label = state.pendingPrintLabels[index];
       const note = el.labelReviewList.querySelector(`[data-label-note-index="${index}"]`)?.value.trim() || "";
-      return label ? { ...label, note } : null;
+      return label ? {
+        ...label,
+        note,
+        ingredientLabels: includeIngredientLabels ? (label.ingredientLabels || []) : []
+      } : null;
     })
     .filter(Boolean);
 }
 
 function updateLabelReviewCount() {
+  const includeIngredientLabels = el.includeIngredientLabels.checked;
+  el.labelReviewList.querySelectorAll("[data-ingredient-label-index]").forEach(status => {
+    const label = state.pendingPrintLabels[Number(status.dataset.ingredientLabelIndex)];
+    const ingredientLabels = label?.ingredientLabels || [];
+    status.textContent = includeIngredientLabels
+      ? ingredientLabelReviewText(ingredientLabels)
+      : "Ingredient labels will not print";
+    status.classList.toggle("is-ready", includeIngredientLabels && ingredientLabelsAreReady(ingredientLabels));
+    status.classList.toggle("is-missing", includeIngredientLabels && !ingredientLabelsAreReady(ingredientLabels));
+    status.classList.toggle("is-excluded", !includeIngredientLabels);
+  });
+
   const selectedLabels = selectedReviewLabels();
   const selectedCount = selectedLabels.length;
   const totalCount = state.pendingPrintLabels.length;
