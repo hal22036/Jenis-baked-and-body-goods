@@ -522,9 +522,9 @@
 
 .dymo-ingredient-label {
   display: grid;
-  grid-template-rows: 0.185in minmax(0, 1fr) 0.17in;
+  grid-template-rows: 0.17in minmax(0, 1fr) 0.165in;
   gap: 0;
-  padding: 0.015in 0.05in 0.06in;
+  padding: 0.055in 0.05in 0.06in;
   font-family: "Times New Roman", serif;
 }
 
@@ -534,8 +534,8 @@
   min-height: 0;
   overflow: hidden;
   line-height: 0.95;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .dymo-ingredient-copy {
@@ -543,7 +543,7 @@
   place-content: center;
   min-height: 0;
   overflow: hidden;
-  line-height: 1;
+  line-height: 0.96;
   overflow-wrap: anywhere;
   text-align: center;
   white-space: normal;
