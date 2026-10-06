@@ -418,16 +418,21 @@ function deleteExistingFlightComponents(sheet, websiteOrderCodes) {
   if (lastRow < 2 || !websiteOrderCodes.size) return;
 
   const orderCodes = sheet.getRange(2, 3, lastRow - 1, 1).getValues().flat();
-  let deleted = 0;
+  const rowsToDelete = [];
 
   for (let index = orderCodes.length - 1; index >= 0; index -= 1) {
     if (websiteOrderCodes.has(String(orderCodes[index] || "").trim())) {
-      sheet.deleteRow(index + 2);
-      deleted += 1;
+      rowsToDelete.push(index + 2);
     }
   }
 
-  Logger.log(`Deleted ${deleted} existing flight component row${deleted === 1 ? "" : "s"}.`);
+  if (!rowsToDelete.length) return;
+
+  // Google Sheets requires at least one non-frozen row to remain.
+  sheet.insertRowAfter(sheet.getMaxRows());
+  rowsToDelete.forEach(rowNumber => sheet.deleteRow(rowNumber));
+
+  Logger.log(`Deleted ${rowsToDelete.length} existing flight component row${rowsToDelete.length === 1 ? "" : "s"}.`);
 }
 
 function ensureSheetHasRange(sheet, startRow, startColumn, rowCount, columnCount) {
