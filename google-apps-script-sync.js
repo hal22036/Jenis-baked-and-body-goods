@@ -855,7 +855,7 @@ function paymentLabel(value) {
     Venmo: "Venmo",
     Zelle: "Zelle",
     PayPal: "PayPal",
-    CashApp: "CashApp",
+    CashApp: "Cash App",
     CashAtPickup: "Cash at Pickup"
   }[value] || value || "";
 }
