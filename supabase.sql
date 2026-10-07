@@ -32,6 +32,7 @@ create table if not exists public.products (
   tax_category text not null default 'home_bakery' check (tax_category in ('home_bakery','general_product')),
   track_inventory boolean not null default false,
   inventory_quantity integer not null default 0 check (inventory_quantity >= 0),
+  inventory_group text,
   product_type text not null default 'standard' check (product_type in ('standard','flight_box')),
   flight_eligible boolean not null default false,
   mini_price_cents integer check (mini_price_cents is null or mini_price_cents >= 0),
@@ -416,6 +417,9 @@ alter table public.products
 add column if not exists inventory_quantity integer not null default 0;
 
 alter table public.products
+add column if not exists inventory_group text;
+
+alter table public.products
 add column if not exists product_type text not null default 'standard';
 
 alter table public.products
@@ -458,6 +462,88 @@ drop constraint if exists products_inventory_quantity_check;
 alter table public.products
 add constraint products_inventory_quantity_check
 check (inventory_quantity >= 0);
+
+create index if not exists products_inventory_group_idx
+on public.products (inventory_group)
+where inventory_group is not null;
+
+-- Foaming Hand Soap scents share one stock pool. Each option mirrors the same
+-- remaining quantity so the storefront can enforce the 23-soap total.
+do $$
+declare
+  v_scent record;
+begin
+  for v_scent in
+    select *
+    from (values
+      ('Almond & Vanilla', 1),
+      ('Be Joyful', 2),
+      ('Bright Citrus & Sunflower', 3),
+      ('Citrus By Dae', 4),
+      ('Coconut Lavender', 5),
+      ('Frosted Snowberry', 6),
+      ('Hawaiian Sunrise', 7),
+      ('Milk Violet', 8),
+      ('Pink Raspberry Prosecco', 9),
+      ('Spiced Pumpkin & Apple Harvest', 10),
+      ('Watermelon Tide', 11)
+    ) as scents(name, sort_order)
+  loop
+    update public.products as p
+    set
+      price_cents = 1000,
+      capacity_units = 0,
+      category = 'Bath & Body',
+      display_group = 'Foaming Hand Soap',
+      option_label = v_scent.name,
+      image_url = 'assets/foaming_soap.png',
+      tax_category = 'general_product',
+      track_inventory = true,
+      inventory_group = 'foaming-hand-soap',
+      sort_order = v_scent.sort_order
+    where lower(trim(p.name)) = lower('Foaming Hand Soap - ' || v_scent.name);
+
+    if not found then
+      insert into public.products (
+        name,
+        description,
+        price_cents,
+        capacity_units,
+        category,
+        display_group,
+        option_label,
+        image_url,
+        shippable,
+        tax_category,
+        track_inventory,
+        inventory_quantity,
+        inventory_group,
+        active,
+        archived,
+        sort_order
+      )
+      values (
+        'Foaming Hand Soap - ' || v_scent.name,
+        null,
+        1000,
+        0,
+        'Bath & Body',
+        'Foaming Hand Soap',
+        v_scent.name,
+        'assets/foaming_soap.png',
+        false,
+        'general_product',
+        true,
+        23,
+        'foaming-hand-soap',
+        true,
+        false,
+        v_scent.sort_order
+      );
+    end if;
+  end loop;
+end;
+$$;
 
 alter table public.coupons
 add column if not exists applies_to text not null default 'items';
@@ -733,16 +819,16 @@ as $$
 declare
   v_track_inventory boolean;
   v_inventory_quantity integer;
+  v_inventory_group text;
 begin
   if p_product_id is null or coalesce(p_quantity_delta, 0) = 0 then
     return;
   end if;
 
-  select p.track_inventory, p.inventory_quantity
-  into v_track_inventory, v_inventory_quantity
+  select p.track_inventory, p.inventory_quantity, nullif(trim(p.inventory_group), '')
+  into v_track_inventory, v_inventory_quantity, v_inventory_group
   from public.products p
-  where p.id = p_product_id
-  for update;
+  where p.id = p_product_id;
 
   if not found then
     raise exception 'Product not found';
@@ -752,13 +838,40 @@ begin
     return;
   end if;
 
+  if v_inventory_group is not null then
+    perform 1
+    from public.products p
+    where p.inventory_group = v_inventory_group
+    order by p.id
+    for update;
+
+    select min(p.inventory_quantity)
+    into v_inventory_quantity
+    from public.products p
+    where p.inventory_group = v_inventory_group
+      and p.track_inventory = true;
+  else
+    select p.inventory_quantity
+    into v_inventory_quantity
+    from public.products p
+    where p.id = p_product_id
+    for update;
+  end if;
+
   if p_quantity_delta > 0 and v_inventory_quantity < p_quantity_delta then
     raise exception 'Not enough inventory available';
   end if;
 
-  update public.products as p
-  set inventory_quantity = greatest(p.inventory_quantity - p_quantity_delta, 0)
-  where p.id = p_product_id;
+  if v_inventory_group is not null then
+    update public.products as p
+    set inventory_quantity = greatest(v_inventory_quantity - p_quantity_delta, 0)
+    where p.inventory_group = v_inventory_group
+      and p.track_inventory = true;
+  else
+    update public.products as p
+    set inventory_quantity = greatest(p.inventory_quantity - p_quantity_delta, 0)
+    where p.id = p_product_id;
+  end if;
 end;
 $$;
 
@@ -1088,6 +1201,38 @@ as $$
   from bath_bomb_items;
 $$;
 
+create or replace function public.foaming_hand_soap_bundle_discount(
+  p_items jsonb
+)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  with soap_items as (
+    select coalesce((item->>'quantity')::integer, 0) as quantity
+    from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) item
+    join public.products p
+      on p.id = (item->>'product_id')::uuid
+    where lower(trim(coalesce(p.display_group, ''))) = 'foaming hand soap'
+      and coalesce((item->>'quantity'), '') ~ '^[0-9]+$'
+  )
+  select (coalesce(sum(quantity), 0)::integer / 2) * 200
+  from soap_items;
+$$;
+
+create or replace function public.product_bundle_discount(
+  p_items jsonb
+)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select public.bath_bomb_bundle_discount(p_items)
+    + public.foaming_hand_soap_bundle_discount(p_items);
+$$;
+
 create or replace function public.flight_box_price(
   p_choices jsonb
 )
@@ -1337,7 +1482,7 @@ begin
 
   v_coupon_code := upper(trim(coalesce(p_coupon_code, '')));
   v_coupon_applies_to := null;
-  v_bundle_discount := public.bath_bomb_bundle_discount(p_items);
+  v_bundle_discount := public.product_bundle_discount(p_items);
   v_discount := v_bundle_discount;
 
   if v_reward_type is not null and v_coupon_code <> '' then
@@ -2131,7 +2276,7 @@ begin
     end if;
   end if;
 
-  v_bundle_discount := public.bath_bomb_bundle_discount(p_items);
+  v_bundle_discount := public.product_bundle_discount(p_items);
   v_discount := v_discount + v_bundle_discount + coalesce(v_order.reward_discount_cents, 0);
 
   if v_discount > v_subtotal then
@@ -2410,7 +2555,7 @@ begin
     raise exception 'This pickup date only has % loaf spots left', greatest(v_capacity - v_existing_loaves, 0);
   end if;
 
-  v_bundle_discount := public.bath_bomb_bundle_discount(p_items);
+  v_bundle_discount := public.product_bundle_discount(p_items);
   v_discount := v_discount + v_bundle_discount;
 
   if v_discount > v_subtotal then
@@ -2606,6 +2751,7 @@ returns table(
   tax_category text,
   track_inventory boolean,
   inventory_quantity integer,
+  inventory_group text,
   product_type text,
   flight_eligible boolean,
   mini_price_cents integer,
@@ -2643,6 +2789,7 @@ begin
     p.tax_category,
     p.track_inventory,
     p.inventory_quantity,
+    p.inventory_group,
     p.product_type,
     p.flight_eligible,
     p.mini_price_cents,
@@ -3116,6 +3263,8 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_inventory_group text;
 begin
   if not public.is_admin() then
     raise exception 'Admin access required';
@@ -3136,6 +3285,11 @@ begin
   if coalesce(p_flight_eligible, false) and coalesce(p_mini_price_cents, 0) <= 0 then
     raise exception 'Enter a mini price before offering this loaf in flights';
   end if;
+
+  select nullif(trim(p.inventory_group), '')
+  into v_inventory_group
+  from public.products p
+  where p.id = p_product_id;
 
   update public.products as p
   set
@@ -3168,6 +3322,14 @@ begin
 
   if saved_id is null then
     raise exception 'Product not found';
+  end if;
+
+  if v_inventory_group is not null then
+    update public.products as p
+    set
+      track_inventory = coalesce(p_track_inventory, false),
+      inventory_quantity = greatest(coalesce(p_inventory_quantity, 0), 0)
+    where p.inventory_group = v_inventory_group;
   end if;
 
   return next;
@@ -3460,6 +3622,12 @@ grant execute on function public.calculate_order_totals(integer,integer,integer,
 
 revoke all on function public.bath_bomb_bundle_discount(jsonb) from public;
 grant execute on function public.bath_bomb_bundle_discount(jsonb) to anon, authenticated;
+
+revoke all on function public.foaming_hand_soap_bundle_discount(jsonb) from public;
+grant execute on function public.foaming_hand_soap_bundle_discount(jsonb) to anon, authenticated;
+
+revoke all on function public.product_bundle_discount(jsonb) from public;
+grant execute on function public.product_bundle_discount(jsonb) to anon, authenticated;
 
 revoke all on function public.flight_box_price(jsonb) from public;
 revoke all on function public.flight_box_description(jsonb) from public;

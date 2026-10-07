@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20260921-new-product-photos";
+const ASSET_VERSION = "20261006-foaming-hand-soap";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -270,7 +270,20 @@ function inventoryQuantityFor(product) {
   return Math.max(Number(product.inventory_quantity || 0), 0);
 }
 
+function inventoryGroupFor(product) {
+  return cleanText(product?.inventory_group).toLowerCase();
+}
+
 function selectedInventoryQuantity(product) {
+  const inventoryGroup = inventoryGroupFor(product);
+  if (inventoryGroup) {
+    return state.products.reduce((sum, item) => {
+      return inventoryGroupFor(item) === inventoryGroup
+        ? sum + Number(state.quantities[item.id] || 0)
+        : sum;
+    }, 0);
+  }
+
   return state.quantities[product.id] || 0;
 }
 
@@ -335,16 +348,40 @@ function bathBombBundleDiscountCents() {
   return Math.floor(bathBombQuantity() / 4) * 200;
 }
 
+function foamingHandSoapQuantity() {
+  return state.products.reduce((sum, product) => {
+    if (cleanText(product.display_group).toLowerCase() !== "foaming hand soap") return sum;
+    return sum + Number(state.quantities[product.id] || 0);
+  }, 0);
+}
+
+function foamingHandSoapBundleDiscountCents() {
+  return Math.floor(foamingHandSoapQuantity() / 2) * 200;
+}
+
+function productBundleDiscountCents() {
+  return bathBombBundleDiscountCents() + foamingHandSoapBundleDiscountCents();
+}
+
 function isBathBombGroup(groupName) {
   return cleanText(groupName).toLowerCase() === "bath bombs";
 }
 
-function bathBombPromoMarkup(groupName) {
-  if (!isBathBombGroup(groupName)) return "";
+function productPromoMarkup(groupName) {
+  if (isBathBombGroup(groupName)) {
+    return `
+      <div class="product-promo-banner">
+        <strong>$5 each or mix and match 4 for $18.</strong>
+        <span>Discount reflects at checkout.</span>
+      </div>
+    `;
+  }
+
+  if (cleanText(groupName).toLowerCase() !== "foaming hand soap") return "";
 
   return `
     <div class="product-promo-banner">
-      <strong>$5 each or mix and match 4 for $18.</strong>
+      <strong>$10 each or mix and match 2 for $18.</strong>
       <span>Discount reflects at checkout.</span>
     </div>
   `;
@@ -389,7 +426,7 @@ function rewardLabel(type = state.reward?.type) {
 }
 
 function totalDiscountCents() {
-  return discountCents() + bathBombBundleDiscountCents() + rewardDiscountCents();
+  return discountCents() + productBundleDiscountCents() + rewardDiscountCents();
 }
 
 function itemNoteFor(productId) {
@@ -679,14 +716,18 @@ function productDescriptionMarkup(description, className = "product-description"
   return text ? `<p class="${className}">${escapeHtml(text)}</p>` : "";
 }
 
-function optionDescriptionMarkup(description) {
-  const text = cleanText(description);
+function optionDescriptionMarkup(product) {
+  const text = cleanText(product?.description);
 
   if (!text) return "";
 
+  const summary = productTabFor(product) === "bath-body"
+    ? "Scent & product details"
+    : "Ingredients & allergens";
+
   return `
     <details class="option-description">
-      <summary>Ingredients &amp; allergens</summary>
+      <summary>${summary}</summary>
       <p>${escapeHtml(text)}</p>
     </details>
   `;
@@ -1216,7 +1257,7 @@ async function calculateOrderTotals() {
     p_home_bakery_subtotal_cents: selectedSubtotalByTaxCategory("home_bakery"),
     p_general_product_subtotal_cents: selectedSubtotalByTaxCategory("general_product"),
     p_discount_cents: totalDiscountCents(),
-    p_coupon_applies_to: bathBombBundleDiscountCents() || rewardDiscountCents()
+    p_coupon_applies_to: productBundleDiscountCents() || rewardDiscountCents()
       ? "items"
       : state.coupon?.applies_to || null,
     p_shipping_method: fulfillmentMethod(),
@@ -1232,7 +1273,7 @@ async function calculateOrderTotals() {
 
 async function applyCouponCode() {
   const code = cleanText(el.couponCode.value).toUpperCase();
-  const subtotal = Math.max(selectedTotalCents() - bathBombBundleDiscountCents(), 0);
+  const subtotal = Math.max(selectedTotalCents() - productBundleDiscountCents(), 0);
 
   if (state.reward) {
     setCouponMessage("Remove the reward before applying a coupon.", "error");
@@ -1679,7 +1720,7 @@ function renderProductCard(products) {
           <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
         </div>
       </div>
-      ${bathBombPromoMarkup(groupName || primaryProduct.name)}
+      ${productPromoMarkup(groupName || primaryProduct.name)}
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>
@@ -1693,7 +1734,7 @@ function renderProductCard(products) {
           <div class="option-row">
             <div class="option-copy">
               <strong>${optionLabelFor(product)}</strong>
-              ${optionDescriptionMarkup(product.description)}
+              ${optionDescriptionMarkup(product)}
             </div>
             <div class="option-controls">
               <div class="quantity" aria-label="${displayNameFor(product)} quantity">
@@ -2104,6 +2145,12 @@ function renderCheckoutReview() {
             <span>-${money(bathBombBundleDiscountCents())}</span>
           </div>
         ` : ""}
+        ${foamingHandSoapBundleDiscountCents() ? `
+          <div class="discount-line">
+            <span>Foaming hand soap deal</span>
+            <span>-${money(foamingHandSoapBundleDiscountCents())}</span>
+          </div>
+        ` : ""}
         ${state.coupon ? `
           <div class="discount-line">
             <span>Coupon ${state.coupon.code} (${couponAppliesToLabel(state.coupon.applies_to)})</span>
@@ -2393,6 +2440,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
       <div class="total-lines">
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
         ${bathBombBundleDiscountCents() ? `<div class="discount-line"><span>Bath bomb deal</span><span>-${money(bathBombBundleDiscountCents())}</span></div>` : ""}
+        ${foamingHandSoapBundleDiscountCents() ? `<div class="discount-line"><span>Foaming hand soap deal</span><span>-${money(foamingHandSoapBundleDiscountCents())}</span></div>` : ""}
         ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code} (${couponAppliesToLabel(coupon.applies_to)})</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
         ${reward ? `<div class="discount-line"><span>${rewardLabel(reward.type)}</span><span>-${money(reward.discount_cents)}</span></div>` : ""}
         <div><span>Tax</span><span>${money(totals?.tax_cents || 0)}</span></div>

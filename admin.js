@@ -571,10 +571,26 @@ function bathBombBundleDiscountCents(items) {
   return Math.floor(bathBombQuantity / 4) * 200;
 }
 
+function foamingHandSoapBundleDiscountCents(items) {
+  const soapQuantity = items.reduce((sum, item) => {
+    const product = productById(item.product_id);
+    const displayGroup = String(product?.display_group || item?.display_group || "").trim().toLowerCase();
+    return displayGroup === "foaming hand soap"
+      ? sum + Number(item.quantity || 0)
+      : sum;
+  }, 0);
+
+  return Math.floor(soapQuantity / 2) * 200;
+}
+
+function productBundleDiscountCents(items) {
+  return bathBombBundleDiscountCents(items) + foamingHandSoapBundleDiscountCents(items);
+}
+
 function manualDiscountForOrder(order) {
   return Math.max(
     Number(order.discount_cents || 0)
-      - bathBombBundleDiscountCents(order.items || [])
+      - productBundleDiscountCents(order.items || [])
       - Number(order.reward_discount_cents || 0),
     0
   );
@@ -582,6 +598,12 @@ function manualDiscountForOrder(order) {
 
 function orderDiscountLabel(order) {
   const details = [];
+  if (bathBombBundleDiscountCents(order.items || [])) {
+    details.push("bath bomb deal");
+  }
+  if (foamingHandSoapBundleDiscountCents(order.items || [])) {
+    details.push("foaming hand soap deal");
+  }
   if (order.coupon_code) {
     details.push(`coupon ${order.coupon_code} (${couponAppliesToLabel(order.coupon_applies_to)})`);
   }
@@ -643,7 +665,7 @@ function refreshManualRowTotals(row) {
     <span>Price each: <strong>${money(product.price_cents)}</strong></span>
     <span>Loaf spots: <strong>${rowLoafSpots}</strong> total (${loafSpotsEach} each)</span>
     <span>${taxCategoryLabel(product.tax_category)}</span>
-    ${product.track_inventory ? `<span>Inventory: <strong>${product.inventory_quantity}</strong> in stock</span>` : ""}
+    ${product.track_inventory ? `<span>${product.inventory_group ? "Shared inventory" : "Inventory"}: <strong>${product.inventory_quantity}</strong> in stock</span>` : ""}
   `;
 }
 
@@ -680,7 +702,7 @@ function updateManualOrderSubtotal() {
   el.manualItemsList.querySelectorAll(".manual-item-row").forEach(refreshManualRowTotals);
   const items = manualOrderItems();
   const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)), 0);
-  const discount = Math.min(dollarsToCents(el.manualDiscount.value) + bathBombBundleDiscountCents(items), subtotal);
+  const discount = Math.min(dollarsToCents(el.manualDiscount.value) + productBundleDiscountCents(items), subtotal);
   const loafSpots = items.reduce((sum, item) => sum + Number(item.loaf_spots || 0), 0);
   el.manualOrderSubtotal.textContent = money(subtotal);
   el.manualOrderDiscount.textContent = `-${money(discount)}`;
@@ -2026,7 +2048,7 @@ function updateOrderItemsPreview(event) {
   const card = editor.closest("[data-order-id]");
   const items = orderItemsFromCard(card);
   const subtotal = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price_cents || 0), 0);
-  const discount = Math.min(dollarsToCents(card.querySelector("[data-order-discount]").value) + bathBombBundleDiscountCents(items), subtotal);
+  const discount = Math.min(dollarsToCents(card.querySelector("[data-order-discount]").value) + productBundleDiscountCents(items), subtotal);
   const tip = dollarsToCents(card.querySelector("[data-order-tip]").value);
   editor.querySelector("[data-order-items-preview]").textContent = money(Math.max(subtotal - discount, 0) + tip);
 }
@@ -2348,7 +2370,9 @@ function renderProducts() {
                 ${money(product.price_cents)}
                 ${product.capacity_units > 0 ? "- counts toward loaf capacity" : "- add-on item"}
                 ${product.shippable ? "- can ship" : "- pickup only"}
-                ${product.track_inventory ? `- ${product.inventory_quantity} in stock` : "- inventory not tracked"}
+                ${product.track_inventory
+                  ? `- ${product.inventory_group ? "shared inventory" : "inventory"}: ${product.inventory_quantity} in stock`
+                  : "- inventory not tracked"}
                 ${product.flight_eligible ? `- mini ${money(product.mini_price_cents)}` : ""}
                 - ${taxCategoryLabel(product.tax_category)}
               </p>
@@ -2385,7 +2409,7 @@ function renderProducts() {
                 </label>
               ` : ""}
               <label class="product-inventory-field">
-                Inventory
+                ${product.inventory_group ? "Shared inventory" : "Inventory"}
                 <input
                   type="number"
                   min="0"

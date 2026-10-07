@@ -118,6 +118,7 @@ Edit:
 - `display_group`
 - `option_label`
 - `image_url`
+- `inventory_group`
 - `active`
 - `sort_order`
 
@@ -161,6 +162,8 @@ Use `track_inventory` and `inventory_quantity` when you have a set number of ite
 
 The storefront hides sold-out tracked items. When a tracked item is ordered, canceled, reactivated, or edited from the admin page, the inventory count updates automatically.
 
+Use the same `inventory_group` value when multiple options share one stock total. Every product in the group should start with the same `inventory_quantity`. Editing the shared inventory on any grouped product in Admin updates the whole group. Foaming Hand Soap uses `inventory_group` = `foaming-hand-soap`, so its 11 scents share one 23-soap limit.
+
 Use `category` to group the order screen. Built-in category order:
 
 - `Everyday`
@@ -185,6 +188,8 @@ Each option is still its own product row, so it can have its own price. The stor
 For the most predictable setup, fill in `display_group` and `option_label`. The storefront can also infer simple groups from names like `Granola - Plain` or `Honey Butter 2 oz`, but the columns are easier to maintain.
 
 Bath bombs have built-in bundle pricing: `$5.00` each, or every set of 4 for `$18.00`. Add each scent as its own product row with `display_group` set to `Bath Bombs`, `option_label` set to the scent, `price_cents` set to `500`, `category` set to `Bath & Body`, `capacity_units` set to `0`, `tax_category` set to `general_product`, and inventory tracking turned on.
+
+Foaming Hand Soap has built-in mix-and-match pricing: `$10.00` each, or every set of 2 for `$18.00`. Its scent rows use `display_group` = `Foaming Hand Soap`, `price_cents` = `1000`, `inventory_group` = `foaming-hand-soap`, and shared inventory tracking. Put each fragrance description in the product's `description` field; the storefront displays it under **Scent & product details**.
 
 ## 5. Add Pickup Dates
 
