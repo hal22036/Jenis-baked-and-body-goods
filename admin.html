@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20261006-foaming-hand-soap-v14" />
+  <link rel="stylesheet" href="admin.css?v=20261006-product-search-sort" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -258,6 +258,26 @@
       </form>
       <p id="product-admin-message" class="message" role="status"></p>
       <div class="product-admin-tabs" id="product-admin-tabs" aria-label="Product sections"></div>
+      <div class="product-admin-tools" aria-label="Product search and sorting">
+        <label>
+          Find product
+          <input id="product-search" type="search" placeholder="Search name, scent, or category" />
+        </label>
+        <label>
+          Sort products
+          <select id="product-sort">
+            <option value="menu">Menu order</option>
+            <option value="name-asc">Name A-Z</option>
+            <option value="name-desc">Name Z-A</option>
+            <option value="price-asc">Price: lowest first</option>
+            <option value="price-desc">Price: highest first</option>
+            <option value="stock-asc">Stock: lowest first</option>
+            <option value="stock-desc">Stock: highest first</option>
+          </select>
+        </label>
+        <button class="secondary-button compact-button" type="button" id="clear-product-search">Clear search</button>
+      </div>
+      <p id="product-filter-summary" class="product-filter-summary muted" role="status"></p>
       <div id="products-list" class="products-list"></div>
     </section>
 
@@ -462,6 +482,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20261006-foaming-hand-soap-v14"></script>
+  <script src="admin.js?v=20261006-product-search-sort"></script>
 </body>
 </html>

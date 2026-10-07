@@ -74,6 +74,10 @@ const el = {
   productsList: document.querySelector("#products-list"),
   rewardsList: document.querySelector("#rewards-list"),
   productAdminTabs: document.querySelector("#product-admin-tabs"),
+  productSearch: document.querySelector("#product-search"),
+  productSort: document.querySelector("#product-sort"),
+  clearProductSearch: document.querySelector("#clear-product-search"),
+  productFilterSummary: document.querySelector("#product-filter-summary"),
   couponsList: document.querySelector("#coupons-list"),
   taxSettingsForm: document.querySelector("#tax-settings-form"),
   taxEnabledInput: document.querySelector("#tax-enabled-input"),
@@ -351,6 +355,13 @@ el.clearCouponForm.addEventListener("click", clearCouponForm);
 
 el.includeArchived.addEventListener("change", loadOrders);
 el.includeArchivedProducts.addEventListener("change", renderProducts);
+el.productSearch.addEventListener("input", renderProducts);
+el.productSort.addEventListener("change", renderProducts);
+el.clearProductSearch.addEventListener("click", () => {
+  el.productSearch.value = "";
+  el.productSearch.focus();
+  renderProducts();
+});
 el.orderPickupFilter.addEventListener("change", renderOrders);
 el.orderInvoiceFilter.addEventListener("change", renderOrders);
 el.orderPhoneFilter.addEventListener("change", renderOrders);
@@ -2328,6 +2339,7 @@ async function saveTaxSettings(event) {
 function renderProducts() {
   if (!state.products.length) {
     renderProductAdminTabs();
+    el.productFilterSummary.textContent = "";
     el.productsList.innerHTML = "<p class=\"muted\">No products to show.</p>";
     return;
   }
@@ -2336,17 +2348,44 @@ function renderProducts() {
 
   const activeTab = PRODUCT_ADMIN_TABS.find(tab => tab.id === state.activeProductAdminTab);
   const categoryOrder = activeTab?.categories || [];
+  const searchTerm = el.productSearch.value.trim().toLocaleLowerCase();
+  const sortMode = el.productSort.value;
   const visibleProducts = productsForActiveAdminTab()
     .filter(product => el.includeArchivedProducts.checked || !product.archived)
+    .filter(product => {
+      if (!searchTerm) return true;
+
+      return [
+        product.name,
+        product.display_group,
+        product.option_label,
+        productCategory(product)
+      ].some(value => String(value || "").toLocaleLowerCase().includes(searchTerm));
+    })
     .sort((a, b) => {
       const aIndex = categoryOrder.indexOf(productCategory(a));
       const bIndex = categoryOrder.indexOf(productCategory(b));
-      return (aIndex === -1 ? categoryOrder.length : aIndex)
+      const categoryDifference = (aIndex === -1 ? categoryOrder.length : aIndex)
         - (bIndex === -1 ? categoryOrder.length : bIndex);
+      if (categoryDifference !== 0) return categoryDifference;
+
+      const nameDifference = compareText(productAdminDisplayName(a), productAdminDisplayName(b));
+
+      if (sortMode === "name-asc") return nameDifference;
+      if (sortMode === "name-desc") return -nameDifference;
+      if (sortMode === "price-asc") return Number(a.price_cents || 0) - Number(b.price_cents || 0) || nameDifference;
+      if (sortMode === "price-desc") return Number(b.price_cents || 0) - Number(a.price_cents || 0) || nameDifference;
+      if (sortMode === "stock-asc") return Number(a.inventory_quantity || 0) - Number(b.inventory_quantity || 0) || nameDifference;
+      if (sortMode === "stock-desc") return Number(b.inventory_quantity || 0) - Number(a.inventory_quantity || 0) || nameDifference;
+
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0) || nameDifference;
     });
 
+  const tabLabel = activeTab?.label || "Products";
+  el.productFilterSummary.textContent = `${visibleProducts.length} ${tabLabel.toLocaleLowerCase()} product${visibleProducts.length === 1 ? "" : "s"} shown${searchTerm ? ` for "${el.productSearch.value.trim()}"` : ""}.`;
+
   if (!visibleProducts.length) {
-    el.productsList.innerHTML = "<p class=\"muted\">No products to show in this section.</p>";
+    el.productsList.innerHTML = `<p class="muted">${searchTerm ? "No products match this search." : "No products to show in this section."}</p>`;
     return;
   }
 
@@ -2520,6 +2559,12 @@ function renderProducts() {
   el.productsList.querySelectorAll("[data-print-product-label]").forEach(button => {
     button.addEventListener("click", printProductIngredientLabel);
   });
+}
+
+function productAdminDisplayName(product) {
+  return product.display_group && product.option_label
+    ? `${product.display_group} - ${product.option_label}`
+    : product.name;
 }
 
 function ingredientLabelFallback(description) {
