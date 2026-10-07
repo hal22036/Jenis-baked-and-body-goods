@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-collapsible-scent-options";
+const ASSET_VERSION = "20261006-bath-body-sizes";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -586,7 +586,18 @@ function cardKeyFor(product) {
 }
 
 function cardTitleFor(product) {
-  return groupNameFor(product) || cleanText(product.name);
+  const groupName = groupNameFor(product);
+  const normalizedGroup = cleanText(groupName).toLowerCase();
+
+  if (normalizedGroup === "bath bombs" || normalizedGroup === "bath bomb") {
+    return "Bath Bombs - 4 oz";
+  }
+
+  if (normalizedGroup === "foaming hand soap") {
+    return "Foaming Hand Soap - 8 oz";
+  }
+
+  return groupName || cleanText(product.name);
 }
 
 function displayNameFor(product) {
@@ -1706,6 +1717,7 @@ function renderProductCard(products) {
     .sort((a, b) => compareSortOrder(a, b) || compareText(optionLabelFor(a), optionLabelFor(b)));
   const primaryProduct = sortedProducts[0];
   const groupName = groupNameFor(primaryProduct);
+  const cardTitle = cardTitleFor(primaryProduct);
   const isGrouped = products.length > 1 || Boolean(groupName);
   const sharedDescription = groupedProductDescription(sortedProducts);
   card.className = `product ${isGrouped ? "option-product" : ""}`;
@@ -1795,10 +1807,10 @@ function renderProductCard(products) {
       : optionTableMarkup;
 
     card.innerHTML = `
-      ${productImageMarkup(sortedProducts, groupName || primaryProduct.name)}
+      ${productImageMarkup(sortedProducts, cardTitle)}
       <div class="option-card-heading">
         <div>
-          <h3>${groupName || primaryProduct.name}</h3>
+          <h3>${cardTitle}</h3>
           <span class="shipping-badge ${sortedProducts.some(product => productIsShippable(product)) ? "can-ship" : "pickup-only"}">
             ${sortedProducts.every(product => productIsShippable(product)) ? "Can ship" : sortedProducts.some(product => productIsShippable(product)) ? "Some options can ship" : "Pickup only"}
           </span>
