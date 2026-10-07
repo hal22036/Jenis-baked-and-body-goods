@@ -497,6 +497,13 @@ begin
       display_group = 'Foaming Hand Soap',
       option_label = v_scent.name,
       image_url = 'assets/foaming_soap.png',
+      description = case
+        when nullif(trim(coalesce(p.description, '')), '') is null then
+          'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.'
+        else p.description
+      end,
+      label_ingredients = 'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
+      label_net_weight = coalesce(nullif(trim(p.label_net_weight), ''), '8 oz (226 g)'),
       tax_category = 'general_product',
       track_inventory = true,
       inventory_group = 'foaming-hand-soap',
@@ -513,6 +520,8 @@ begin
         display_group,
         option_label,
         image_url,
+        label_ingredients,
+        label_net_weight,
         shippable,
         tax_category,
         track_inventory,
@@ -524,13 +533,15 @@ begin
       )
       values (
         'Foaming Hand Soap - ' || v_scent.name,
-        null,
+        'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
         1000,
         0,
         'Bath & Body',
         'Foaming Hand Soap',
         v_scent.name,
         'assets/foaming_soap.png',
+        'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
+        '8 oz (226 g)',
         false,
         'general_product',
         true,
