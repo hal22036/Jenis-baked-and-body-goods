@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-foaming-hand-soap";
+const ASSET_VERSION = "20261006-foaming-hand-soap-details";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -721,7 +721,9 @@ function optionDescriptionMarkup(product) {
 
   if (!text) return "";
 
-  const summary = productTabFor(product) === "bath-body"
+  const summary = cleanText(product?.display_group).toLowerCase() === "foaming hand soap"
+    ? "Scent notes"
+    : productTabFor(product) === "bath-body"
     ? "Scent & product details"
     : "Ingredients & allergens";
 
@@ -731,6 +733,13 @@ function optionDescriptionMarkup(product) {
       <p>${escapeHtml(text)}</p>
     </details>
   `;
+}
+
+function groupedProductDescriptionMarkup(products) {
+  const primaryProduct = products[0];
+  if (cleanText(primaryProduct?.display_group).toLowerCase() !== "foaming hand soap") return "";
+
+  return productDescriptionMarkup(primaryProduct.label_ingredients, "product-description grouped-product-description");
 }
 
 function remainingFor(date) {
@@ -1721,6 +1730,7 @@ function renderProductCard(products) {
         </div>
       </div>
       ${productPromoMarkup(groupName || primaryProduct.name)}
+      ${groupedProductDescriptionMarkup(sortedProducts)}
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>

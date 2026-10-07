@@ -498,7 +498,7 @@ begin
       display_group = 'Foaming Hand Soap',
       option_label = v_scent.name,
       image_url = 'assets/foaming_soap.png',
-      description = 'Scent notes:' || E'\n' || v_scent.scent_notes || E'\n\n' || v_product_details,
+      description = v_scent.scent_notes,
       label_ingredients = v_product_details,
       label_net_weight = coalesce(nullif(trim(p.label_net_weight), ''), '8 oz (226 g)'),
       tax_category = 'general_product',
@@ -530,7 +530,7 @@ begin
       )
       values (
         'Foaming Hand Soap - ' || v_scent.name,
-        'Scent notes:' || E'\n' || v_scent.scent_notes || E'\n\n' || v_product_details,
+        v_scent.scent_notes,
         1000,
         0,
         'Bath & Body',
