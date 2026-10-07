@@ -144,8 +144,7 @@ h2 {
 
 .category-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  align-items: stretch;
+  align-items: start;
 }
 
 .product-grid {
@@ -311,7 +310,8 @@ h2 {
 }
 
 .option-product {
-  min-height: auto;
+  min-height: 0;
+  align-content: start;
 }
 
 .product-image-button {
@@ -560,6 +560,27 @@ h2 {
   white-space: pre-line;
 }
 
+.grouped-product-description {
+  margin: 2px 0;
+  padding: 10px 12px;
+  border-block: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.grouped-product-description summary {
+  width: fit-content;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.grouped-product-description p {
+  margin: 10px 0 0;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 .option-copy {
   min-width: 0;
 }
@@ -580,6 +601,12 @@ h2 {
 .option-description p {
   margin: 8px 0 0;
   line-height: 1.45;
+}
+
+@media (max-width: 980px) {
+  .category-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .item-note-field {

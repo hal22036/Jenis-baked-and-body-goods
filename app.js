@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-shared-product-ingredients";
+const ASSET_VERSION = "20261006-bath-body-layout";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -753,7 +753,15 @@ function groupedProductDescription(products) {
 }
 
 function groupedProductDescriptionMarkup(description) {
-  return productDescriptionMarkup(description, "product-description grouped-product-description");
+  const text = cleanText(description);
+  if (!text) return "";
+
+  return `
+    <details class="grouped-product-description">
+      <summary>Ingredients &amp; caution</summary>
+      <p>${escapeHtml(text)}</p>
+    </details>
+  `;
 }
 
 function remainingFor(date) {
