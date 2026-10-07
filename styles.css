@@ -476,6 +476,53 @@ h2 {
   gap: 8px;
 }
 
+.product-options-disclosure {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.product-options-disclosure > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.product-options-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.product-options-disclosure > summary::after {
+  content: "+";
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.product-options-disclosure[open] > summary::after {
+  content: "\2212";
+}
+
+.product-options-disclosure > summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.product-options-content {
+  display: grid;
+  gap: 18px;
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
 .option-table-head,
 .option-row {
   display: grid;

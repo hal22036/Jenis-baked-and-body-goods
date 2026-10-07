@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-bath-body-layout";
+const ASSET_VERSION = "20261006-collapsible-scent-options";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -1738,22 +1738,7 @@ function renderProductCard(products) {
       ${state.quantities[primaryProduct.id] > 0 ? itemNoteMarkup(primaryProduct) : ""}
     `;
   } else {
-    card.innerHTML = `
-      ${productImageMarkup(sortedProducts, groupName || primaryProduct.name)}
-      <div class="option-card-heading">
-        <div>
-          <h3>${groupName || primaryProduct.name}</h3>
-          <span class="shipping-badge ${sortedProducts.some(product => productIsShippable(product)) ? "can-ship" : "pickup-only"}">
-            ${sortedProducts.every(product => productIsShippable(product)) ? "Can ship" : sortedProducts.some(product => productIsShippable(product)) ? "Some options can ship" : "Pickup only"}
-          </span>
-        </div>
-        <div class="group-subtotal">
-          <span>Item subtotal</span>
-          <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
-        </div>
-      </div>
-      ${productPromoMarkup(groupName || primaryProduct.name)}
-      ${groupedProductDescriptionMarkup(sharedDescription)}
+    const optionTableMarkup = `
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>
@@ -1786,6 +1771,46 @@ function renderProductCard(products) {
         <span>Item subtotal</span>
         <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
       </div>
+    `;
+    const isBathBodyCard = productTabFor(primaryProduct) === "bath-body";
+    const selectedOptionCount = sortedProducts.reduce(
+      (sum, product) => sum + Number(state.quantities[product.id] || 0),
+      0
+    );
+    const optionDisclosureLabel = cleanText(groupName).toLowerCase() === "whipped sugar scrub"
+      ? "View scent & size options"
+      : "View scent options";
+    const optionsMarkup = isBathBodyCard
+      ? `
+        <details class="product-options-disclosure" ${selectedOptionCount > 0 ? "open" : ""}>
+          <summary>
+            <span>${optionDisclosureLabel}</span>
+            <small>${sortedProducts.length} option${sortedProducts.length === 1 ? "" : "s"}</small>
+          </summary>
+          <div class="product-options-content">
+            ${optionTableMarkup}
+          </div>
+        </details>
+      `
+      : optionTableMarkup;
+
+    card.innerHTML = `
+      ${productImageMarkup(sortedProducts, groupName || primaryProduct.name)}
+      <div class="option-card-heading">
+        <div>
+          <h3>${groupName || primaryProduct.name}</h3>
+          <span class="shipping-badge ${sortedProducts.some(product => productIsShippable(product)) ? "can-ship" : "pickup-only"}">
+            ${sortedProducts.every(product => productIsShippable(product)) ? "Can ship" : sortedProducts.some(product => productIsShippable(product)) ? "Some options can ship" : "Pickup only"}
+          </span>
+        </div>
+        <div class="group-subtotal">
+          <span>Item subtotal</span>
+          <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
+        </div>
+      </div>
+      ${productPromoMarkup(groupName || primaryProduct.name)}
+      ${groupedProductDescriptionMarkup(sharedDescription)}
+      ${optionsMarkup}
     `;
   }
 
