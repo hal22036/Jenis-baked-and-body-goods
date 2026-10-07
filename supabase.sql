@@ -472,22 +472,23 @@ where inventory_group is not null;
 do $$
 declare
   v_scent record;
+  v_product_details text := 'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.';
 begin
   for v_scent in
     select *
     from (values
-      ('Almond & Vanilla', 1),
-      ('Be Joyful', 2),
-      ('Bright Citrus & Sunflower', 3),
-      ('Citrus By Dae', 4),
-      ('Coconut Lavender', 5),
-      ('Frosted Snowberry', 6),
-      ('Hawaiian Sunrise', 7),
-      ('Milk Violet', 8),
-      ('Pink Raspberry Prosecco', 9),
-      ('Spiced Pumpkin & Apple Harvest', 10),
-      ('Watermelon Tide', 11)
-    ) as scents(name, sort_order)
+      ('Almond & Vanilla', 1, E'Top: Citrus, Almond\nHeart: Orchid, Cashmere\nBase: Musk, Wood, Vanilla'),
+      ('Be Joyful', 2, E'Top: Clementine, Mango, Melon\nHeart: Honeysuckle, Jasmine\nBase: Dulce de Leche, Amber, Sugar Cane\nEssential Oil: Lemon Oil'),
+      ('Bright Citrus & Sunflower', 3, E'Top: Mandarin Orange\nHeart: Sunflower\nBase: Suede\nEssential Oil: Lemon Oil'),
+      ('Citrus By Dae', 4, E'Top: Sicilian Orange, Lush Kiwi, Peach Nectar\nHeart: Orange Flower, Blush Rose, Lily of the Valley, Heliotrope, Night Blooming Jasmine\nBase: Sandalwood, Sultry Musk\nEssential Oils: Orange Essence Oil'),
+      ('Coconut Lavender', 5, E'Top Notes: Bergamot, Citrus\nMiddle Notes: Heliotrope, Jasmine, Floral, Muguet\nBase Notes: Vanilla, Cedarwood, Tonka, Musk'),
+      ('Frosted Snowberry', 6, E'Top: Mint, Citrus\nHeart: Snowberry, Cranberry\nBase: Pine, Musk\nEssential Oil: Lemon Oil, Nutmeg Oil, Orange Essence Oil'),
+      ('Hawaiian Sunrise', 7, E'Top: Citrus, Green Leaves\nHeart: Peach, Jasmine, Rose\nBase: Spice\nTop: Coconut\nHeart: Sugar\nBase: Tonka, Vanilla, Musk\nEssential Oil: Patchouli Oil'),
+      ('Milk Violet', 8, E'Top: Coconut, Fig Milk, Almond Blossom\nHeart: Vanilla Orchid, Magnolia, Cotton\nBase: Macadamia Milk, Sandalwood'),
+      ('Pink Raspberry Prosecco', 9, E'Top: Raspberry, Apple, Champagne\nMiddle: Pink Lily, Jasmine, Peach Blossom\nBottom: Coconut, Sugar\nEssential Oils: Orange Essence Oil'),
+      ('Spiced Pumpkin & Apple Harvest', 10, E'Top: Apple, Orange, Buttery Notes\nHeart: Pumpkin, Ginger, Cinnamon, Clove, Nutmeg\nBase: Vanilla, Caramel, Sugar, Cream, Musk'),
+      ('Watermelon Tide', 11, E'Top: Juicy Watermelon, Pineapple, Citrus\nHeart: Pink Sea Salt, Berry\nBase: Ocean Air, Cotton Candy, Musk')
+    ) as scents(name, sort_order, scent_notes)
   loop
     update public.products as p
     set
@@ -497,12 +498,8 @@ begin
       display_group = 'Foaming Hand Soap',
       option_label = v_scent.name,
       image_url = 'assets/foaming_soap.png',
-      description = case
-        when nullif(trim(coalesce(p.description, '')), '') is null then
-          'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.'
-        else p.description
-      end,
-      label_ingredients = 'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
+      description = 'Scent notes:' || E'\n' || v_scent.scent_notes || E'\n\n' || v_product_details,
+      label_ingredients = v_product_details,
       label_net_weight = coalesce(nullif(trim(p.label_net_weight), ''), '8 oz (226 g)'),
       tax_category = 'general_product',
       track_inventory = true,
@@ -533,14 +530,14 @@ begin
       )
       values (
         'Foaming Hand Soap - ' || v_scent.name,
-        'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
+        'Scent notes:' || E'\n' || v_scent.scent_notes || E'\n\n' || v_product_details,
         1000,
         0,
         'Bath & Body',
         'Foaming Hand Soap',
         v_scent.name,
         'assets/foaming_soap.png',
-        'Ingredients: Water, Sodium Cocoyl Glycinate, Cocamidopropyl Hydroxysultaine, Caprylyl/Capryl Glucoside, Polysorbate 20, Glycerin, Sodium Benzoate, Sorbitol, Carboxymethylcellulose Sodium, Potassium Sorbate, IFRA-compliant Fragrance Oil. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.',
+        v_product_details,
         '8 oz (226 g)',
         false,
         'general_product',
