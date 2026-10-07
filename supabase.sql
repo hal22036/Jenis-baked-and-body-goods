@@ -553,6 +553,16 @@ begin
 end;
 $$;
 
+update public.products as p
+set label_ingredients = 'Ingredients: Glycerin, Water, Sodium Cocoyl Isethionate, Sorbitol, Propylene Glycol, Disodium Lauryl Sulfosuccinate, Stearic Acid, Sodium Chloride, Diazolidinyl Urea (and) Iodopropynyl Butylcarbamate, Regular Granulated Sugar, Sunflower Oil, IFRA-compliant Fragrance Oil, Vitamin E Oil, Mica Powder. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.'
+where lower(trim(coalesce(p.display_group, ''))) = 'whipped sugar scrub'
+   or lower(trim(p.name)) like 'whipped sugar scrub%';
+
+update public.products as p
+set label_ingredients = 'Ingredients: Baking Soda, Citric Acid, Cornstarch, Epsom Salt, Kaolin Clay, Sunflower Oil, Polysorbate 80, Witch Hazel, IFRA-compliant Fragrance Oil, Mica Colorant, Isopropyl Alcohol. Caution: For external use only. Not for consumption. Avoid contact with eyes. Discontinue use if irritation occurs.'
+where lower(trim(coalesce(p.display_group, ''))) in ('bath bombs', 'bath bomb')
+   or lower(trim(p.name)) like 'bath bomb%';
+
 alter table public.coupons
 add column if not exists applies_to text not null default 'items';
 

@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-foaming-hand-soap-details";
+const ASSET_VERSION = "20261006-shared-product-ingredients";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -716,10 +716,10 @@ function productDescriptionMarkup(description, className = "product-description"
   return text ? `<p class="${className}">${escapeHtml(text)}</p>` : "";
 }
 
-function optionDescriptionMarkup(product) {
+function optionDescriptionMarkup(product, sharedDescription = "") {
   const text = cleanText(product?.description);
 
-  if (!text) return "";
+  if (!text || text.toLowerCase() === cleanText(sharedDescription).toLowerCase()) return "";
 
   const summary = cleanText(product?.display_group).toLowerCase() === "foaming hand soap"
     ? "Scent notes"
@@ -735,11 +735,25 @@ function optionDescriptionMarkup(product) {
   `;
 }
 
-function groupedProductDescriptionMarkup(products) {
+function groupedProductDescription(products) {
   const primaryProduct = products[0];
-  if (cleanText(primaryProduct?.display_group).toLowerCase() !== "foaming hand soap") return "";
+  const displayGroup = cleanText(primaryProduct?.display_group).toLowerCase();
+  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub"]);
+  if (!supportedGroups.has(displayGroup)) return "";
 
-  return productDescriptionMarkup(primaryProduct.label_ingredients, "product-description grouped-product-description");
+  const descriptions = products
+    .map(product => cleanText(product.label_ingredients))
+    .filter(Boolean);
+  if (!descriptions.length) return "";
+
+  const firstDescription = descriptions[0];
+  return descriptions.every(description => description.toLowerCase() === firstDescription.toLowerCase())
+    ? firstDescription
+    : "";
+}
+
+function groupedProductDescriptionMarkup(description) {
+  return productDescriptionMarkup(description, "product-description grouped-product-description");
 }
 
 function remainingFor(date) {
@@ -1685,6 +1699,7 @@ function renderProductCard(products) {
   const primaryProduct = sortedProducts[0];
   const groupName = groupNameFor(primaryProduct);
   const isGrouped = products.length > 1 || Boolean(groupName);
+  const sharedDescription = groupedProductDescription(sortedProducts);
   card.className = `product ${isGrouped ? "option-product" : ""}`;
 
   if (isFlightBoxProduct(primaryProduct)) {
@@ -1730,7 +1745,7 @@ function renderProductCard(products) {
         </div>
       </div>
       ${productPromoMarkup(groupName || primaryProduct.name)}
-      ${groupedProductDescriptionMarkup(sortedProducts)}
+      ${groupedProductDescriptionMarkup(sharedDescription)}
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>
@@ -1744,7 +1759,7 @@ function renderProductCard(products) {
           <div class="option-row">
             <div class="option-copy">
               <strong>${optionLabelFor(product)}</strong>
-              ${optionDescriptionMarkup(product)}
+              ${optionDescriptionMarkup(product, sharedDescription)}
             </div>
             <div class="option-controls">
               <div class="quantity" aria-label="${displayNameFor(product)} quantity">
