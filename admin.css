@@ -473,7 +473,6 @@
 }
 
 .dymo-label-customer,
-.dymo-label em,
 .dymo-label-details {
   display: block;
   overflow: hidden;
@@ -513,11 +512,16 @@
   line-height: 0.98;
 }
 
-.dymo-label em {
-  font-size: 7.2pt;
+.dymo-label-note {
+  flex: 0 0 0.24in;
+  display: block;
+  overflow: hidden;
+  font-size: 6.2pt;
   font-style: normal;
   font-weight: 800;
-  line-height: 0.98;
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dymo-ingredient-label {
@@ -673,12 +677,14 @@
   font-weight: 800;
 }
 
-.label-note-field input {
+.label-note-field textarea {
   width: 100%;
   height: auto;
-  min-height: 38px;
+  min-height: 58px;
   padding: 8px 10px;
   font-size: 0.95rem;
+  line-height: 1.35;
+  resize: vertical;
 }
 
 .archive-date-button {

@@ -377,6 +377,11 @@ el.selectAllLabels.addEventListener("click", () => setLabelReviewChecked(true));
 el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
+el.labelReviewList.addEventListener("keydown", event => {
+  if (event.target.matches("[data-label-note-index]")) {
+    event.stopPropagation();
+  }
+});
 el.addManualItem.addEventListener("click", () => addManualItemRow());
 el.manualUseSpecialDate.addEventListener("change", syncManualSpecialDateFields);
 el.manualItemsList.addEventListener("input", updateManualOrderSubtotal);
@@ -1391,7 +1396,7 @@ function orderLabelsFor(orders, batchType) {
           labels.push({
             customerName: order.customer_name,
             itemName: adminItemName(item),
-            note: item.item_note || "",
+            note: orderLabelNote(item),
             paymentMethod: paymentLabel(order.payment_method),
             pickupDate: order.pickup_date,
             ingredientLabels: ingredientLabelsForOrderItem(item)
@@ -1401,6 +1406,13 @@ function orderLabelsFor(orders, batchType) {
     });
 
   return labels;
+}
+
+function orderLabelNote(item) {
+  if (!isFlightBoxItem(item)) return String(item.item_note || "").trim();
+
+  const loafNames = flightBoxMiniLoafNames(item.item_note);
+  return loafNames.length ? loafNames.join(" | ") : String(item.item_note || "").trim();
 }
 
 function ingredientLabelsForOrderItem(item) {
@@ -1481,13 +1493,11 @@ function openLabelReview(labels, title) {
       </label>
       <label class="label-note-field">
         Label note
-        <input
-          type="text"
+        <textarea
           data-label-note-index="${index}"
-          value="${escapeAttribute(label.note || "")}"
           placeholder="Optional note, e.g. No coconut"
-          maxlength="48"
-        />
+          maxlength="120"
+          rows="2">${escapeHtml(label.note || "")}</textarea>
       </label>
       <div class="ingredient-label-choices">
         ${(label.ingredientLabels || []).length
@@ -1624,6 +1634,7 @@ function printLabelMarkup(markup) {
   document.body.classList.add("printing-labels");
   el.labelPrintRoot.classList.add("is-measuring");
   fitIngredientLabelTitles();
+  fitOrderLabelNotes();
   el.labelPrintRoot.classList.remove("is-measuring");
   window.print();
   window.setTimeout(() => {
@@ -1644,6 +1655,18 @@ function fitIngredientLabelTitles() {
   });
 }
 
+function fitOrderLabelNotes() {
+  el.labelPrintRoot.querySelectorAll(".dymo-label-note").forEach(note => {
+    let fontSize = Number.parseFloat(window.getComputedStyle(note).fontSize) * 0.75 || 6.2;
+    const minimumFontSize = 4.5;
+
+    while (fontSize > minimumFontSize && note.scrollHeight > note.clientHeight + 1) {
+      fontSize = Math.max(minimumFontSize, fontSize - 0.25);
+      note.style.fontSize = `${fontSize}pt`;
+    }
+  });
+}
+
 function ingredientLabelTitleOverflows(title) {
   return title.scrollHeight > title.clientHeight + 1
     || title.scrollWidth > title.clientWidth + 1;
@@ -1658,7 +1681,7 @@ function orderLabelMarkup(label) {
       <strong class="dymo-label-customer">${escapeHtml(label.customerName)}</strong>
       <span class="dymo-label-item ${itemSizeClass}">${escapeHtml(itemName)}</span>
       <span class="dymo-label-details">${escapeHtml(label.paymentMethod)} - ${prettyDate(label.pickupDate)}</span>
-      ${label.note ? `<em>${escapeHtml(label.note)}</em>` : ""}
+      ${label.note ? `<em class="dymo-label-note">${escapeHtml(label.note)}</em>` : ""}
     </section>
   `;
 }
