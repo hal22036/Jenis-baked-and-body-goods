@@ -1882,7 +1882,7 @@ function orderCardMarkup(order) {
           Fulfillment
           <select data-fulfillment-status>
             ${option("new", "New", order.fulfillment_status)}
-            ${option("ready", "Ready", order.fulfillment_status)}
+            ${order.fulfillment_status === "ready" ? option("ready", "Ready (existing)", order.fulfillment_status) : ""}
             ${option("fulfilled", "Fulfilled", order.fulfillment_status)}
             ${option("canceled", "Canceled", order.fulfillment_status)}
           </select>
