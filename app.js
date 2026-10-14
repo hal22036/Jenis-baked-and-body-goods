@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261006-bath-body-sizes";
+const ASSET_VERSION = "20261014-flight-box-limit";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -1604,6 +1604,7 @@ function renderFlightBoxCard(card, product) {
         <h3>${escapeHtml(product.name)}</h3>
         <span class="shipping-badge pickup-only">Pickup only</span>
         ${productDescriptionMarkup(product.description)}
+        <p class="flight-weekly-limit">Limited to 4 flight boxes per pickup week.</p>
       </div>
       <div class="group-subtotal">
         <span>This box</span>
@@ -1621,7 +1622,7 @@ function renderFlightBoxCard(card, product) {
           </label>
         `).join("")}
       </div>
-      <button class="flight-add-button" type="button" data-add-flight ${draftComplete ? "" : "disabled"}>
+      <button class="flight-add-button" type="button" data-add-flight ${draftComplete && state.flightBoxes.length < 4 ? "" : "disabled"}>
         Add flight box - ${money(draftTotal)}
       </button>
     ` : `
@@ -1658,6 +1659,10 @@ function renderFlightBoxCard(card, product) {
   });
 
   card.querySelector("[data-add-flight]")?.addEventListener("click", () => {
+    if (state.flightBoxes.length >= 4) {
+      setMessage("Only 4 flight boxes can be ordered per pickup week.", "error");
+      return;
+    }
     const remaining = remainingForSelectedDate();
     const boxCapacity = capacityUnitsFor(product);
 
