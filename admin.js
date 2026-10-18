@@ -1876,6 +1876,7 @@ function orderCardMarkup(order) {
             ${option("pending", "Pending", order.payment_status)}
             ${option("paid", "Paid", order.payment_status)}
             ${option("refunded", "Refunded", order.payment_status)}
+            ${option("canceled", "Canceled", order.payment_status)}
           </select>
         </label>
         <label>

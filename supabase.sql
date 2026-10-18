@@ -333,7 +333,7 @@ drop constraint if exists orders_payment_status_check;
 
 alter table public.orders
 add constraint orders_payment_status_check
-check (payment_status in ('pending','paid','refunded'));
+check (payment_status in ('pending','paid','refunded','canceled'));
 
 alter table public.orders
 drop constraint if exists orders_fulfillment_status_check;
@@ -2102,7 +2102,7 @@ begin
     raise exception 'Invalid payment method';
   end if;
 
-  if p_payment_status not in ('pending','paid','refunded') then
+  if p_payment_status not in ('pending','paid','refunded','canceled') then
     raise exception 'Invalid payment status';
   end if;
 
@@ -2479,7 +2479,7 @@ begin
     raise exception 'Invalid payment method';
   end if;
 
-  if p_payment_status not in ('pending','paid','refunded') then
+  if p_payment_status not in ('pending','paid','refunded','canceled') then
     raise exception 'Invalid payment status';
   end if;
 
