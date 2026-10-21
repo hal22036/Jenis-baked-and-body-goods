@@ -80,6 +80,51 @@
   background: var(--surface-soft);
 }
 
+.extra-bake-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.extra-bake-fields label[hidden] {
+  display: none;
+}
+
+.extra-bake-note-field {
+  grid-column: 1 / -1;
+}
+
+.extra-bake-list {
+  display: grid;
+  gap: 8px;
+}
+
+.extra-bake-list h4 {
+  margin: 8px 0 0;
+}
+
+.extra-bake-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.extra-bake-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.extra-bake-row p {
+  margin: 4px 0 0;
+  white-space: pre-line;
+}
+
 .order-date-group {
   display: grid;
   gap: 12px;

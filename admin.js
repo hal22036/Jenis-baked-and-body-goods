@@ -6,6 +6,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const state = {
   orders: [],
+  extraBakeItems: [],
   pickupDates: [],
   products: [],
   activeProductAdminTab: "baked-goods",
@@ -70,6 +71,18 @@ const el = {
   printSelectedLabels: document.querySelector("#print-selected-labels"),
   labelPrintRoot: document.querySelector("#label-print-root"),
   ordersList: document.querySelector("#orders-list"),
+  extraBakeForm: document.querySelector("#extra-bake-form"),
+  extraBakeId: document.querySelector("#extra-bake-id"),
+  extraBakeDate: document.querySelector("#extra-bake-date"),
+  extraBakeBatch: document.querySelector("#extra-bake-batch"),
+  extraBakeProduct: document.querySelector("#extra-bake-product"),
+  extraBakeName: document.querySelector("#extra-bake-name"),
+  extraBakeCustomField: document.querySelector("#extra-bake-custom-field"),
+  extraBakeQuantity: document.querySelector("#extra-bake-quantity"),
+  extraBakeCapacity: document.querySelector("#extra-bake-capacity"),
+  extraBakeNote: document.querySelector("#extra-bake-note"),
+  extraBakeTotal: document.querySelector("#extra-bake-total"),
+  extraBakeMessage: document.querySelector("#extra-bake-message"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
   rewardsList: document.querySelector("#rewards-list"),
@@ -377,6 +390,11 @@ el.selectAllLabels.addEventListener("click", () => setLabelReviewChecked(true));
 el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
+el.extraBakeForm.addEventListener("submit", saveExtraBakeItem);
+el.extraBakeProduct.addEventListener("change", syncExtraBakeFields);
+el.extraBakeQuantity.addEventListener("input", updateExtraBakeTotal);
+el.extraBakeCapacity.addEventListener("input", updateExtraBakeTotal);
+document.querySelector("#extra-bake-clear").addEventListener("click", clearExtraBakeForm);
 el.labelReviewList.addEventListener("keydown", event => {
   if (event.target.matches("[data-label-note-index]")) {
     event.stopPropagation();
@@ -818,6 +836,7 @@ async function loadOrders() {
   }
 
   state.orders = data || [];
+  await loadExtraBakeItems();
 
   try {
     renderOrderFilters();
@@ -831,7 +850,7 @@ async function loadOrders() {
 
 function renderOrderFilters() {
   const selectedPickupDate = el.orderPickupFilter.value;
-  const pickupDates = [...new Set(state.orders.map(order => order.pickup_date))]
+  const pickupDates = [...new Set([...state.orders, ...state.extraBakeItems].map(order => order.pickup_date))]
     .sort((a, b) => a.localeCompare(b));
 
   el.orderPickupFilter.innerHTML = `
@@ -1179,16 +1198,173 @@ async function applyRewardAdjustment({ customerName, customerPhone, breadDelta, 
   setMessage(el.rewardAdminMessage, "Reward balance updated.", "success");
 }
 
+async function loadExtraBakeItems() {
+  const { data, error } = await supabaseClient.rpc("admin_list_extra_bake_items");
+  if (error) {
+    state.extraBakeItems = [];
+    setMessage(el.extraBakeMessage, "Extra bake items could not load. Run supabase-extra-bake-items.sql in Supabase first. " + error.message, "error");
+    return;
+  }
+  state.extraBakeItems = data || [];
+  setMessage(el.extraBakeMessage);
+}
+
+function renderExtraBakeFormOptions() {
+  const dateId = el.extraBakeDate.value;
+  const productId = el.extraBakeProduct.value;
+  el.extraBakeDate.innerHTML = '<option value="">Choose a bake date</option>' + adminPickupDateOptions(dateId);
+  if (state.pickupDates.some(date => date.id === dateId)) el.extraBakeDate.value = dateId;
+  const edited = state.extraBakeItems.find(item => item.id === el.extraBakeId.value);
+  el.extraBakeProduct.innerHTML = '<option value="">Choose product</option>' + state.products
+    .filter(product => product.category !== "Bath & Body" && (!product.archived || product.id === edited?.product_id))
+    .slice().sort((a, b) => compareText(productAdminDisplayName(a), productAdminDisplayName(b)))
+    .map(product => `<option value="${escapeAttribute(product.id)}">${escapeHtml(productAdminDisplayName(product))}</option>`).join("")
+    + '<option value="other">Other / custom item</option>';
+  if (productId === "other" || state.products.some(product => product.id === productId)) {
+    el.extraBakeProduct.value = productId;
+  }
+  syncExtraBakeFields();
+}
+
+function syncExtraBakeFields() {
+  const isCustom = el.extraBakeProduct.value === "other";
+  const product = state.products.find(item => item.id === el.extraBakeProduct.value);
+  el.extraBakeCustomField.hidden = !isCustom;
+  el.extraBakeName.required = isCustom;
+  el.extraBakeCapacity.readOnly = !isCustom;
+  if (product) el.extraBakeCapacity.value = Number(product.capacity_units || 0);
+  updateExtraBakeTotal();
+}
+
+function updateExtraBakeTotal() {
+  const quantity = Number(el.extraBakeQuantity.value || 0);
+  const units = Number(el.extraBakeCapacity.value || 0);
+  el.extraBakeTotal.textContent = `Reserves ${quantity * units} loaf spots.`;
+}
+
+function clearExtraBakeForm() {
+  el.extraBakeForm.reset();
+  el.extraBakeId.value = "";
+  renderExtraBakeFormOptions();
+}
+
+async function saveExtraBakeItem(event) {
+  event.preventDefault();
+  const submit = el.extraBakeForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  setMessage(el.extraBakeMessage, "Saving extra bake item...");
+  try {
+    const { error } = await supabaseClient.rpc("admin_save_extra_bake_item", {
+      p_id: el.extraBakeId.value || null,
+      p_pickup_date_id: el.extraBakeDate.value,
+      p_product_id: el.extraBakeProduct.value === "other" ? null : el.extraBakeProduct.value,
+      p_item_name: el.extraBakeName.value.trim(),
+      p_batch_name: el.extraBakeBatch.value.trim(),
+      p_quantity: Number(el.extraBakeQuantity.value),
+      p_capacity_units: Number(el.extraBakeCapacity.value),
+      p_note: el.extraBakeNote.value.trim()
+    });
+    if (error) throw error;
+    clearExtraBakeForm();
+    await Promise.all([loadOrders(), loadPickupDates()]);
+    setMessage(el.extraBakeMessage, "Extra bake item saved.", "success");
+  } catch (error) {
+    setMessage(el.extraBakeMessage, error.message || "Could not save extra bake item.", "error");
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function extraBakeListMarkup(items) {
+  if (!items.length) return "";
+  return `<section class="extra-bake-list" aria-label="Extra bake items">
+    <h4>Extra bake items</h4>
+    ${items.map(item => `<article class="extra-bake-row">
+      <div><strong>${escapeHtml(item.batch_name)} - ${escapeHtml(item.item_name)}</strong>
+        <p>Qty ${item.quantity} &middot; ${item.quantity * item.capacity_units} loaf spots</p>
+        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}</div>
+      <div class="toolbar-actions">
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="print" data-extra-bake-id="${item.id}">Print labels</button>
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="edit" data-extra-bake-id="${item.id}">Edit</button>
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="remove" data-extra-bake-id="${item.id}">Remove</button>
+      </div>
+    </article>`).join("")}
+  </section>`;
+}
+
+function extraBakeLabelsFor(items) {
+  return items.flatMap(item => {
+    const product = state.products.find(product => product.id === item.product_id);
+    const ingredientItem = {
+      ...product,
+      name: item.item_name,
+      item_note: item.note,
+      product_type: item.is_flight_box ? "flight_box" : "standard"
+    };
+    return Array.from({ length: Number(item.quantity) }, () => ({
+      customerName: item.batch_name,
+      itemName: item.item_name,
+      note: orderLabelNote(ingredientItem),
+      paymentMethod: "Extra bake",
+      pickupDate: item.pickup_date,
+      ingredientLabels: ingredientLabelsForOrderItem(ingredientItem),
+      printOrderLabel: true
+    }));
+  });
+}
+
+async function handleExtraBakeAction(event) {
+  const button = event.currentTarget;
+  const item = state.extraBakeItems.find(item => item.id === button.dataset.extraBakeId);
+  if (!item) return;
+  const action = button.dataset.extraBakeAction;
+  if (action === "print") {
+    openLabelReview(extraBakeLabelsFor([item]), `Extra bake labels for ${item.batch_name}`);
+    return;
+  }
+  if (action === "edit") {
+    el.extraBakeId.value = item.id;
+    renderExtraBakeFormOptions();
+    el.extraBakeDate.value = item.pickup_date_id;
+    el.extraBakeProduct.value = item.product_id || "other";
+    el.extraBakeBatch.value = item.batch_name;
+    el.extraBakeName.value = item.item_name;
+    el.extraBakeQuantity.value = item.quantity;
+    el.extraBakeCapacity.value = item.capacity_units;
+    el.extraBakeNote.value = item.note;
+    syncExtraBakeFields();
+    const box = document.querySelector("#extra-bake-box");
+    box.open = true;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (!window.confirm(`Remove ${item.quantity} x ${item.item_name} from the bake list and release its loaf spots?`)) return;
+  button.disabled = true;
+  try {
+    const { error } = await supabaseClient.rpc("admin_remove_extra_bake_item", { p_id: item.id });
+    if (error) throw error;
+    if (el.extraBakeId.value === item.id) clearExtraBakeForm();
+    await Promise.all([loadOrders(), loadPickupDates()]);
+    setMessage(el.extraBakeMessage, "Extra bake item removed; loaf spots released.", "success");
+  } catch (error) {
+    button.disabled = false;
+    setMessage(el.extraBakeMessage, error.message || "Could not remove extra bake item.", "error");
+  }
+}
+
 function renderOrders() {
   const orders = filteredOrders();
+  const extras = state.extraBakeItems.filter(item =>
+    el.orderPickupFilter.value === "all" || item.pickup_date === el.orderPickupFilter.value
+  );
 
-  if (!state.orders.length) {
+  if (!state.orders.length && !state.extraBakeItems.length) {
     el.ordersList.innerHTML = "<p class=\"muted\">No orders to show.</p>";
     setMessage(el.adminMessage, "0 orders shown.", "success");
     return;
   }
 
-  if (!orders.length) {
+  if (!orders.length && !extras.length) {
     el.ordersList.innerHTML = "<p class=\"muted\">No orders match those filters.</p>";
     setMessage(el.adminMessage, `0 of ${state.orders.length} orders shown.`, "success");
     return;
@@ -1200,7 +1376,11 @@ function renderOrders() {
     return groups;
   }, new Map());
 
-  el.ordersList.innerHTML = [...ordersByPickupDate.entries()].map(([pickupDate, dateOrders]) => `
+  extras.forEach(item => {
+    if (!ordersByPickupDate.has(item.pickup_date)) ordersByPickupDate.set(item.pickup_date, []);
+  });
+
+  el.ordersList.innerHTML = [...ordersByPickupDate.entries()].sort(([a], [b]) => compareText(a, b)).map(([pickupDate, dateOrders]) => `
     <section class="order-date-group">
       <div class="order-date-heading">
         <div>
@@ -1213,7 +1393,8 @@ function renderOrders() {
           ${archivePickupDateButtonMarkup(pickupDate)}
         </div>
       </div>
-      ${bakingBreakdownMarkup(dateOrders)}
+      ${bakingBreakdownMarkup(dateOrders, extras.filter(item => item.pickup_date === pickupDate))}
+      ${extraBakeListMarkup(extras.filter(item => item.pickup_date === pickupDate))}
       <div class="orders-list">
         ${dateOrders.map(order => orderCardMarkup(order)).join("")}
       </div>
@@ -1255,10 +1436,14 @@ function renderOrders() {
   el.ordersList.querySelectorAll("[data-print-labels]").forEach(button => {
     button.addEventListener("click", printOrderLabels);
   });
+  el.ordersList.querySelectorAll("[data-extra-bake-action]").forEach(button => {
+    button.addEventListener("click", handleExtraBakeAction);
+  });
 }
 
 function labelPrintButtonMarkup(pickupDate, orders, batchType) {
-  const labels = orderLabelsFor(orders, batchType);
+  const labels = [...orderLabelsFor(orders, batchType),
+    ...(batchType === "baked" ? extraBakeLabelsFor(state.extraBakeItems.filter(item => item.pickup_date === pickupDate)) : [])];
   const printCount = totalPrintedLabelCount(labels);
   const label = batchType === "bath-body" ? "Print Bath & Body labels" : "Print Baked Goods labels";
 
@@ -1292,7 +1477,7 @@ function archivePickupDateButtonMarkup(pickupDate) {
   `;
 }
 
-function bakingBreakdownMarkup(orders) {
+function bakingBreakdownMarkup(orders, extras = []) {
   const breadTotals = new Map();
   const miniLoafTotals = new Map();
   const treatTotals = new Map();
@@ -1318,7 +1503,7 @@ function bakingBreakdownMarkup(orders) {
   const miniLoafItems = sortedBreakdownItems(miniLoafTotals);
   const treatItems = sortedBreakdownItems(treatTotals);
 
-  if (!breadItems.length && !miniLoafItems.length && !treatItems.length) {
+  if (!breadItems.length && !miniLoafItems.length && !treatItems.length && !extras.length) {
     return `
       <aside class="baking-breakdown">
         ${bakingBreakdownHeaderMarkup(weeklyIncomeCents)}
@@ -1334,6 +1519,10 @@ function bakingBreakdownMarkup(orders) {
         ${breakdownTableMarkup("Bread loaf orders", breadItems)}
         ${breakdownTableMarkup("Mini loaves for flight boxes", miniLoafItems)}
         ${breakdownTableMarkup("Other Delicious Treats", treatItems)}
+        ${extras.length ? breakdownTableMarkup("Extra bake items", sortedBreakdownItems(extras.reduce((map, item) => {
+          map.set(item.item_name, (map.get(item.item_name) || 0) + Number(item.quantity));
+          return map;
+        }, new Map()))) : ""}
       </div>
     </aside>
   `;
@@ -1399,6 +1588,7 @@ function orderLabelsFor(orders, batchType) {
             note: orderLabelNote(item),
             paymentMethod: paymentLabel(order.payment_method),
             pickupDate: order.pickup_date,
+            printOrderLabel: true,
             ingredientLabels: ingredientLabelsForOrderItem(item)
           });
         }
@@ -1465,7 +1655,9 @@ function printOrderLabels(event) {
   const printOrders = orderId
     ? state.orders.filter(order => order.order_id === orderId)
     : filteredOrders().filter(order => order.pickup_date === pickupDate);
-  const labels = orderLabelsFor(printOrders, batchType);
+  const labels = [...orderLabelsFor(printOrders, batchType),
+    ...(!orderId && batchType === "baked"
+      ? extraBakeLabelsFor(state.extraBakeItems.filter(item => item.pickup_date === pickupDate)) : [])];
 
   if (!labels.length) {
     setMessage(el.adminMessage, "No labels to print for that batch.", "error");
@@ -2308,6 +2500,7 @@ async function loadPickupDates() {
   }
 
   state.pickupDates = data || [];
+  renderExtraBakeFormOptions();
   renderPickupDates();
   renderManualOrderDateOptions();
 }
@@ -2323,6 +2516,7 @@ async function loadProducts() {
   }
 
   state.products = data || [];
+  renderExtraBakeFormOptions();
   renderProducts();
   refreshManualProductSelects();
   setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} loaded.`, "success");

@@ -19,6 +19,22 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 - Does not accept or process credit cards.
 - Keeps bakery name, intro text, pickup note, and payment links in one owner-friendly settings block in `app.js`.
 
+## Extra bake items
+
+For an existing site, run `supabase-extra-bake-items.sql` in Supabase SQL Editor
+before publishing the admin update. New installations include it in `supabase.sql`.
+In Admin -> Orders, open **Add extra bake item** and choose a date, product,
+quantity, batch name, and optional label note. Custom items allow manual loaf spots.
+Extras appear separately in the weekly breakdown and baked-goods label batches.
+They can be edited, printed individually, or removed to release their spots.
+They do not create customer orders, revenue, reward credits, or spreadsheet rows.
+The four-flight-box weekly limit includes extras. Extra flight-box flavor notes
+can use `Loaf 1: Classic White` on separate lines to include matching mini labels.
+
+For the browser regression check, use Node 20+ with Playwright on `NODE_PATH`
+(or set `PLAYWRIGHT_MODULE`), then run `node tests/extra-bake-items.cjs`.
+The check uses mocked RPC responses and does not write to Supabase.
+
 ## Files
 
 - `index.html` - static GitHub Pages page
