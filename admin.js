@@ -71,12 +71,8 @@ const el = {
   printSelectedLabels: document.querySelector("#print-selected-labels"),
   labelPrintRoot: document.querySelector("#label-print-root"),
   ordersList: document.querySelector("#orders-list"),
-  extraBakeForm: document.querySelector("#extra-bake-form"),
-  extraBakeId: document.querySelector("#extra-bake-id"),
-  extraBakeDate: document.querySelector("#extra-bake-date"),
-  extraBakeBatch: document.querySelector("#extra-bake-batch"),
-  extraBakeItems: document.querySelector("#extra-bake-items"),
-  extraBakeTotal: document.querySelector("#extra-bake-total"),
+  extraBakeId: document.querySelector("#manual-extra-bake-id"),
+  manualExtraBake: document.querySelector("#manual-extra-bake"),
   extraBakeMessage: document.querySelector("#extra-bake-message"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
   productsList: document.querySelector("#products-list"),
@@ -385,19 +381,8 @@ el.selectAllLabels.addEventListener("click", () => setLabelReviewChecked(true));
 el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
-el.extraBakeForm.addEventListener("submit", saveExtraBakeItem);
-el.extraBakeItems.addEventListener("change", event => {
-  if (event.target.matches("[data-extra-product]")) syncExtraBakeFields(event.target.closest("[data-extra-row]"));
-});
-el.extraBakeItems.addEventListener("input", updateExtraBakeTotal);
-el.extraBakeItems.addEventListener("click", event => {
-  if (!event.target.closest("[data-remove-extra-row]")) return;
-  event.target.closest("[data-extra-row]").remove();
-  if (!el.extraBakeItems.children.length) addExtraBakeRow();
-  updateExtraBakeTotal();
-});
-document.querySelector("#extra-bake-add-item").addEventListener("click", () => addExtraBakeRow());
-document.querySelector("#extra-bake-clear").addEventListener("click", clearExtraBakeForm);
+el.manualExtraBake.addEventListener("change", syncManualExtraBakeMode);
+document.querySelector("#clear-manual-order").addEventListener("click", clearManualOrderForm);
 el.labelReviewList.addEventListener("keydown", event => {
   if (event.target.matches("[data-label-note-index]")) {
     event.stopPropagation();
@@ -465,7 +450,7 @@ function renderManualOrderDateOptions() {
   if (!el.manualPickupDate) return;
 
   const selected = el.manualPickupDate.value;
-  const upcomingPickupDates = state.pickupDates.filter(date => isActiveOrderDate(date));
+  const upcomingPickupDates = state.pickupDates.filter(date => date.is_open && isActiveOrderDate(date));
 
   el.manualPickupDate.innerHTML = `
     <option value="">Choose order date</option>
@@ -546,6 +531,9 @@ function addManualItemRow(item = {}) {
         <input data-manual-item-loaf-spots type="number" min="0" step="1" value="${item.loafSpots ?? 0}" />
       </label>
     </div>
+    <label class="manual-item-note-field">Item note
+      <input data-manual-item-note placeholder="Optional requests/notes" value="${escapeAttribute(item.itemNote || "")}" />
+    </label>
     <button class="secondary-button compact-button" type="button" data-remove-manual-item>Remove</button>
   `;
   el.manualItemsList.append(row);
@@ -555,7 +543,8 @@ function addManualItemRow(item = {}) {
 
 function manualProductOptions(selectedProductId) {
   return state.products
-    .filter(product => (product.active && !product.archived) || product.id === selectedProductId)
+    .filter(product => ((product.active && !product.archived) || product.id === selectedProductId)
+      && (!el.manualExtraBake.checked || product.category !== "Bath & Body"))
     .slice()
     .sort((a, b) => compareText(manualProductLabel(a), manualProductLabel(b)))
     .map(product => {
@@ -668,6 +657,9 @@ function syncManualItemRow(row) {
   productDetails.hidden = !product;
   customName.required = isOther;
   priceInput.required = isOther;
+  priceInput.closest("label").hidden = el.manualExtraBake.checked;
+  taxCategory.closest("label").hidden = el.manualExtraBake.checked;
+  priceInput.required = isOther && !el.manualExtraBake.checked;
 
   if (product) {
     priceInput.value = centsToDollars(product.price_cents);
@@ -699,10 +691,10 @@ function refreshManualRowTotals(row) {
   const rowLoafSpots = quantity * loafSpotsEach;
 
   productDetails.innerHTML = `
-    <span>Price each: <strong>${money(product.price_cents)}</strong></span>
+    ${el.manualExtraBake.checked ? "" : `<span>Price each: <strong>${money(product.price_cents)}</strong></span>`}
     <span>Loaf spots: <strong>${rowLoafSpots}</strong> total (${loafSpotsEach} each)</span>
-    <span>${taxCategoryLabel(product.tax_category)}</span>
-    ${product.track_inventory ? `<span>${product.inventory_group ? "Shared inventory" : "Inventory"}: <strong>${product.inventory_quantity}</strong> in stock</span>` : ""}
+    ${el.manualExtraBake.checked ? "" : `<span>${taxCategoryLabel(product.tax_category)}</span>`}
+    ${!el.manualExtraBake.checked && product.track_inventory ? `<span>${product.inventory_group ? "Shared inventory" : "Inventory"}: <strong>${product.inventory_quantity}</strong> in stock</span>` : ""}
   `;
 }
 
@@ -729,7 +721,8 @@ function manualOrderItems() {
         unit_price_cents: unitPriceCents,
         tax_category: product ? (product.tax_category || "home_bakery") : row.querySelector("[data-manual-item-tax-category]").value,
         loaf_spots: quantity * loafSpotsEach,
-        is_other: isOther
+        is_other: isOther,
+        item_note: row.querySelector("[data-manual-item-note]").value.trim()
       };
     })
     .filter(item => item.name || item.quantity || item.unit_price_cents);
@@ -748,16 +741,21 @@ function updateManualOrderSubtotal() {
 }
 
 function clearManualOrderForm() {
+  const extra = el.manualExtraBake.checked;
   const selectedDate = el.manualPickupDate.value;
   const useSpecialDate = el.manualUseSpecialDate.checked;
   const specialDate = el.manualSpecialPickupDate.value;
   el.manualOrderForm.reset();
+  el.extraBakeId.value = "";
+  el.manualExtraBake.checked = extra;
+  el.manualExtraBake.disabled = false;
   el.manualPickupDate.value = selectedDate;
   el.manualUseSpecialDate.checked = useSpecialDate;
   el.manualSpecialPickupDate.value = specialDate;
   syncManualSpecialDateFields();
   el.manualItemsList.innerHTML = "";
   addManualItemRow();
+  syncManualExtraBakeMode();
   updateManualOrderSubtotal();
 }
 
@@ -776,7 +774,7 @@ async function saveManualOrder(event) {
     return;
   }
 
-  if (discountCents > subtotal) {
+  if (!el.manualExtraBake.checked && discountCents > subtotal) {
     setMessage(el.manualOrderMessage, "Discount cannot be more than the subtotal.", "error");
     el.manualDiscount.focus();
     return;
@@ -791,6 +789,11 @@ async function saveManualOrder(event) {
   if (!el.manualUseSpecialDate.checked && !el.manualPickupDate.value) {
     setMessage(el.manualOrderMessage, "Choose an order date.", "error");
     el.manualPickupDate.focus();
+    return;
+  }
+
+  if (el.manualExtraBake.checked) {
+    await saveManualExtraBake(items);
     return;
   }
 
@@ -1212,92 +1215,49 @@ async function loadExtraBakeItems() {
   setMessage(el.extraBakeMessage);
 }
 
-function renderExtraBakeFormOptions() {
-  const dateId = el.extraBakeDate.value;
-  const rows = extraBakeDraftItems();
-  el.extraBakeDate.innerHTML = '<option value="">Choose a bake date</option>' + adminPickupDateOptions(dateId);
-  if (state.pickupDates.some(date => date.id === dateId)) el.extraBakeDate.value = dateId;
-  el.extraBakeItems.innerHTML = "";
-  (rows.length ? rows : [{}]).forEach(item => addExtraBakeRow(item));
+function syncManualExtraBakeMode() {
+  const extra = el.manualExtraBake.checked;
+  [el.manualCustomerPhone, el.manualCustomerEmail, el.manualPaymentMethod,
+    el.manualPaymentStatus, el.manualFulfillmentStatus, el.manualDiscount].forEach(input => {
+    input.closest("label").hidden = extra;
+    input.disabled = extra;
+  });
+  [el.manualOrderSubtotal, el.manualOrderDiscount, el.manualOrderAfterDiscount].forEach(node => {
+    node.closest(".manual-order-total").hidden = extra;
+  });
+  document.querySelector("#manual-name-label").textContent = extra ? "Name / batch" : "Customer name";
+  el.manualCustomerName.placeholder = extra ? "Extra Stock, Samples, or a name" : "Customer name";
+  el.manualNotes.placeholder = extra ? "Optional batch notes for labels" : "Pickup notes, special instructions, or payment details";
+  if (extra && !el.manualCustomerName.value.trim()) el.manualCustomerName.value = "Extra Stock";
+  el.manualOrderForm.querySelector('[type="submit"]').textContent = extra ? "Save extra bake batch" : "Save in-person order";
+  el.manualExtraBake.disabled = Boolean(el.extraBakeId.value);
+  refreshManualProductSelects();
 }
 
-function extraBakeDraftItems() {
-  return [...el.extraBakeItems.querySelectorAll("[data-extra-row]")].map(row => ({
-    product_id: row.querySelector("[data-extra-product]").value || "",
-    item_name: row.querySelector("[data-extra-name]").value,
-    quantity: Number(row.querySelector("[data-extra-quantity]").value),
-    capacity_units: Number(row.querySelector("[data-extra-capacity]").value),
-    note: row.querySelector("[data-extra-note]").value
-  }));
-}
-
-function addExtraBakeRow(item = {}) {
-  const row = document.createElement("div");
-  row.className = "extra-bake-fields extra-bake-item-row";
-  row.setAttribute("data-extra-row", "");
-  row.innerHTML = `
-    <label>Product<select data-extra-product required>
-      <option value="">Choose product</option>
-      ${state.products.filter(product => product.category !== "Bath & Body" && (!product.archived || product.id === item.product_id))
-        .slice().sort((a, b) => compareText(productAdminDisplayName(a), productAdminDisplayName(b)))
-        .map(product => `<option value="${escapeAttribute(product.id)}">${escapeHtml(productAdminDisplayName(product))}</option>`).join("")}
-      <option value="other">Other / custom item</option>
-    </select></label>
-    <label data-extra-custom-field hidden>Custom item<input data-extra-name value="${escapeAttribute(item.item_name || "")}" /></label>
-    <label>Quantity<input data-extra-quantity type="number" min="1" step="1" value="${Number(item.quantity || 1)}" required /></label>
-    <label>Loaf spots each<input data-extra-capacity type="number" min="0" step="1" value="${Number(item.capacity_units ?? 1)}" required /></label>
-    <button type="button" class="secondary-button compact-button" data-remove-extra-row>Remove item</button>
-    <label class="extra-bake-note-field">Label note<textarea data-extra-note rows="2" placeholder="Optional requests/notes">${escapeHtml(item.note || "")}</textarea></label>
-  `;
-  el.extraBakeItems.append(row);
-  row.querySelector("[data-extra-product]").value = item.product_id || (item.item_name ? "other" : "");
-  syncExtraBakeFields(row);
-}
-
-function syncExtraBakeFields(row) {
-  const productId = row.querySelector("[data-extra-product]").value;
-  const isCustom = productId === "other";
-  const product = state.products.find(item => item.id === productId);
-  row.querySelector("[data-extra-custom-field]").hidden = !isCustom;
-  row.querySelector("[data-extra-name]").required = isCustom;
-  row.querySelector("[data-extra-capacity]").readOnly = !isCustom;
-  if (product) row.querySelector("[data-extra-capacity]").value = Number(product.capacity_units || 0);
-  updateExtraBakeTotal();
-}
-
-function updateExtraBakeTotal() {
-  const spots = extraBakeDraftItems().reduce((sum, item) => sum + item.quantity * item.capacity_units, 0);
-  el.extraBakeTotal.textContent = `Reserves ${spots} loaf spots.`;
-}
-
-function clearExtraBakeForm() {
-  el.extraBakeForm.reset();
-  el.extraBakeId.value = "";
-  el.extraBakeItems.innerHTML = "";
-  renderExtraBakeFormOptions();
-}
-
-async function saveExtraBakeItem(event) {
-  event.preventDefault();
-  const submit = el.extraBakeForm.querySelector('[type="submit"]');
+async function saveManualExtraBake(items) {
+  const submit = el.manualOrderForm.querySelector('[type="submit"]');
   submit.disabled = true;
-  setMessage(el.extraBakeMessage, "Saving extra bake batch...");
+  setMessage(el.manualOrderMessage, "Saving extra bake batch...");
   try {
-    const { error } = await supabaseClient.rpc("admin_save_extra_bake_batch", {
+    const { error } = await supabaseClient.rpc("admin_save_extra_bake_batch_with_date", {
       p_batch_id: el.extraBakeId.value || null,
-      p_pickup_date_id: el.extraBakeDate.value,
-      p_batch_name: el.extraBakeBatch.value.trim(),
-      p_items: extraBakeDraftItems().map(item => ({
-        ...item, product_id: item.product_id === "other" ? null : item.product_id,
-        item_name: item.item_name.trim(), note: item.note.trim()
+      p_pickup_date_id: el.manualUseSpecialDate.checked ? null : el.manualPickupDate.value,
+      p_special_pickup_date: el.manualUseSpecialDate.checked ? el.manualSpecialPickupDate.value : null,
+      p_batch_name: el.manualCustomerName.value.trim() || "Extra Stock",
+      p_items: items.map(item => ({
+        product_id: item.product_id,
+        item_name: item.name,
+        quantity: item.quantity,
+        capacity_units: item.loaf_spots / item.quantity,
+        note: [item.item_note, el.manualNotes.value.trim()].filter(Boolean).join("\n")
       }))
     });
     if (error) throw error;
-    clearExtraBakeForm();
+    clearManualOrderForm();
     await Promise.all([loadOrders(), loadPickupDates()]);
-    setMessage(el.extraBakeMessage, "Extra bake batch saved.", "success");
+    setMessage(el.manualOrderMessage, "Extra bake batch saved.", "success");
   } catch (error) {
-    setMessage(el.extraBakeMessage, error.message || "Could not save extra bake batch.", "error");
+    setMessage(el.manualOrderMessage, error.message || "Could not save extra bake batch.", "error");
   } finally {
     submit.disabled = false;
   }
@@ -1363,13 +1323,24 @@ async function handleExtraBakeAction(event) {
     return;
   }
   if (action === "edit") {
+    clearManualOrderForm();
     el.extraBakeId.value = batchId;
-    renderExtraBakeFormOptions();
-    el.extraBakeDate.value = item.pickup_date_id;
-    el.extraBakeBatch.value = item.batch_name;
-    el.extraBakeItems.innerHTML = "";
-    batch.forEach(entry => addExtraBakeRow(entry));
-    const box = document.querySelector("#extra-bake-box");
+    el.manualExtraBake.checked = true;
+    const date = state.pickupDates.find(date => date.id === item.pickup_date_id);
+    const special = !date || !date.is_open || !isActiveOrderDate(date);
+    el.manualUseSpecialDate.checked = special;
+    el.manualPickupDate.value = special ? "" : item.pickup_date_id;
+    el.manualSpecialPickupDate.value = special ? item.pickup_date : "";
+    syncManualSpecialDateFields();
+    el.manualCustomerName.value = item.batch_name;
+    el.manualNotes.value = "";
+    el.manualItemsList.innerHTML = "";
+    batch.forEach(entry => addManualItemRow({
+      productId: entry.product_id || "other", name: entry.item_name,
+      quantity: entry.quantity, loafSpots: entry.capacity_units, itemNote: entry.note
+    }));
+    syncManualExtraBakeMode();
+    const box = document.querySelector("#manual-order-box");
     box.open = true;
     box.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -1379,7 +1350,7 @@ async function handleExtraBakeAction(event) {
   try {
     const { error } = await supabaseClient.rpc("admin_remove_extra_bake_batch", { p_batch_id: batchId });
     if (error) throw error;
-    if (el.extraBakeId.value === batchId) clearExtraBakeForm();
+    if (el.extraBakeId.value === batchId) clearManualOrderForm();
     await Promise.all([loadOrders(), loadPickupDates()]);
     setMessage(el.extraBakeMessage, "Extra bake batch removed; loaf spots released.", "success");
   } catch (error) {
@@ -2544,7 +2515,6 @@ async function loadPickupDates() {
   }
 
   state.pickupDates = data || [];
-  renderExtraBakeFormOptions();
   renderPickupDates();
   renderManualOrderDateOptions();
 }
@@ -2560,7 +2530,6 @@ async function loadProducts() {
   }
 
   state.products = data || [];
-  renderExtraBakeFormOptions();
   renderProducts();
   refreshManualProductSelects();
   setMessage(el.productAdminMessage, `${state.products.length} product${state.products.length === 1 ? "" : "s"} loaded.`, "success");

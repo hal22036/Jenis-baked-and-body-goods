@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bakery Admin | Jeni's Home Baked Goods</title>
   <link rel="stylesheet" href="styles.css?v=20260917-item-notes" />
-  <link rel="stylesheet" href="admin.css?v=20261021-extra-bake-batches" />
+  <link rel="stylesheet" href="admin.css?v=20261021-unified-extra-bake" />
 </head>
 <body>
   <header class="site-header admin-header">
@@ -86,9 +86,11 @@
         </label>
         <button class="secondary-button compact-button" type="button" id="clear-order-filters">Clear filters</button>
       </div>
-      <details class="manual-order-box">
+      <details class="manual-order-box" id="manual-order-box">
         <summary>Add in-person order</summary>
         <form id="manual-order-form" class="manual-order-form">
+          <input id="manual-extra-bake-id" type="hidden" />
+          <label class="inline-check"><input id="manual-extra-bake" type="checkbox" />Extra bake (no sale)</label>
           <div class="manual-order-grid">
             <label>
               Order date
@@ -103,7 +105,7 @@
               <input id="manual-special-pickup-date" type="date" />
             </label>
             <label>
-              Customer name
+              <span id="manual-name-label">Customer name</span>
               <input id="manual-customer-name" required placeholder="Customer name" />
             </label>
             <label>
@@ -172,24 +174,8 @@
             <strong id="manual-order-loaf-spots">0</strong>
           </div>
           <button type="submit">Save in-person order</button>
+          <button type="button" class="secondary-button" id="clear-manual-order">Clear form</button>
           <p id="manual-order-message" class="message" role="status"></p>
-        </form>
-      </details>
-      <details class="manual-order-box" id="extra-bake-box">
-        <summary>Add extra bake batch</summary>
-        <form id="extra-bake-form" class="manual-order-form">
-          <input id="extra-bake-id" type="hidden" />
-          <div class="extra-bake-fields">
-            <label>Bake date<select id="extra-bake-date" required></select></label>
-            <label>Name / batch<input id="extra-bake-batch" value="Extra Stock" placeholder="Extra Stock, Samples, or a name" required /></label>
-          </div>
-          <div id="extra-bake-items" class="extra-bake-items"></div>
-          <button type="button" class="secondary-button manual-add-item-button" id="extra-bake-add-item">Add item</button>
-          <p id="extra-bake-total" class="muted" role="status"></p>
-          <div class="toolbar-actions">
-            <button type="submit">Save extra bake batch</button>
-            <button type="button" class="secondary-button" id="extra-bake-clear">Clear</button>
-          </div>
         </form>
       </details>
       <p id="extra-bake-message" class="message" role="status"></p>
@@ -500,6 +486,6 @@
   <div id="label-print-root" class="label-print-root" aria-hidden="true"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="admin.js?v=20261021-extra-bake-batches"></script>
+  <script src="admin.js?v=20261021-unified-extra-bake"></script>
 </body>
 </html>

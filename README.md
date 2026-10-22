@@ -24,8 +24,11 @@ Production-ready starter for a small bakery using GitHub Pages for the frontend 
 For an existing site, run `supabase-extra-bake-items.sql` in Supabase SQL Editor
 before publishing the admin update. New installations include it in `supabase.sql`.
 For existing extra-bake installations, also run `supabase-extra-bake-batches.sql`.
-In Admin -> Orders, open **Add extra bake batch**, choose a date and batch name,
-then add any number of products with quantities and individual label notes.
+For special dates and the unified form, run `supabase-extra-bake-special-dates.sql`.
+In Admin -> Orders, open **Add in-person order**, check **Extra bake (no sale)**,
+choose a date and batch name, then add products with quantities and label notes.
+Expired and closed dates are hidden from the date dropdown; use **Special date**
+for an off-schedule or past bake date. New special dates stay closed to website orders.
 Custom items allow manual loaf spots. Extras combine with matching products in
 the bread, mini-loaf, and treats breakdowns and appear in baked-goods label batches.
 Whole batches can be edited, printed, or removed to release their spots.

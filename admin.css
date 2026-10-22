@@ -80,31 +80,6 @@
   background: var(--surface-soft);
 }
 
-.extra-bake-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  align-items: end;
-  gap: 12px;
-}
-
-.extra-bake-fields label[hidden] {
-  display: none;
-}
-
-.extra-bake-note-field {
-  grid-column: 1 / -1;
-}
-
-.extra-bake-items {
-  display: grid;
-  gap: 12px;
-}
-
-.extra-bake-item-row {
-  padding: 12px 0;
-  border-block: 1px solid var(--border);
-}
-
 .extra-bake-list {
   display: grid;
   gap: 8px;
@@ -1019,11 +994,15 @@
 }
 
 .manual-item-row {
-  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr) minmax(90px, 0.35fr) minmax(190px, 0.65fr) minmax(122px, auto);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(72px, 0.4fr) minmax(110px, 0.8fr) auto;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fffdf9;
+}
+
+.manual-item-row > label {
+  min-width: 0;
 }
 
 .manual-product-field {
@@ -1081,6 +1060,14 @@
 .manual-items-list {
   display: grid;
   gap: 10px;
+}
+
+.manual-item-note-field {
+  grid-column: 1 / -1;
+}
+
+.manual-order-form [hidden] {
+  display: none;
 }
 
 .manual-item-row > [data-remove-manual-item] {
