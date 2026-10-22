@@ -659,6 +659,8 @@ function syncManualItemRow(row) {
   priceInput.required = isOther;
   priceInput.closest("label").hidden = el.manualExtraBake.checked;
   taxCategory.closest("label").hidden = el.manualExtraBake.checked;
+  priceInput.disabled = el.manualExtraBake.checked;
+  taxCategory.disabled = el.manualExtraBake.checked;
   priceInput.required = isOther && !el.manualExtraBake.checked;
 
   if (product) {
@@ -700,12 +702,15 @@ function refreshManualRowTotals(row) {
 
 function manualOrderItems() {
   return [...el.manualItemsList.querySelectorAll(".manual-item-row")]
+    .filter(row => row.querySelector("[data-manual-product-select]").value
+      || row.querySelector("[data-manual-item-name]").value.trim()
+      || row.querySelector("[data-manual-item-note]").value.trim())
     .map(row => {
       const selectedProductId = row.querySelector("[data-manual-product-select]").value;
       const product = productById(selectedProductId);
       const isOther = selectedProductId === "other";
       const quantity = Number(row.querySelector("[data-manual-item-quantity]").value || 0);
-      const unitPriceCents = product
+      const unitPriceCents = el.manualExtraBake.checked ? 0 : product
         ? product.price_cents
         : dollarsToCents(row.querySelector("[data-manual-item-price]").value);
       const loafSpotsEach = product
@@ -765,12 +770,24 @@ async function saveManualOrder(event) {
   const items = manualOrderItems();
   const subtotal = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.unit_price_cents || 0)), 0);
   const discountCents = dollarsToCents(el.manualDiscount.value);
-  const invalidItem = items.find(item =>
-    !item.name || item.quantity <= 0 || item.unit_price_cents < 0 || item.loaf_spots < 0
-  );
-
-  if (!items.length || invalidItem) {
-    setMessage(el.manualOrderMessage, "Add at least one item with a name, quantity, and price.", "error");
+  if (!items.length) {
+    setMessage(el.manualOrderMessage, "Choose at least one product or add a custom item.", "error");
+    return;
+  }
+  if (items.some(item => !item.name)) {
+    setMessage(el.manualOrderMessage, "Choose a product or enter a name for each custom item.", "error");
+    return;
+  }
+  if (items.some(item => !Number.isInteger(item.quantity) || item.quantity <= 0)) {
+    setMessage(el.manualOrderMessage, "Each item needs a whole-number quantity of at least 1.", "error");
+    return;
+  }
+  if (items.some(item => !Number.isInteger(item.loaf_spots / item.quantity) || item.loaf_spots < 0)) {
+    setMessage(el.manualOrderMessage, "Loaf spots each must be a whole number of 0 or more.", "error");
+    return;
+  }
+  if (!el.manualExtraBake.checked && items.some(item => !Number.isFinite(item.unit_price_cents) || item.unit_price_cents < 0)) {
+    setMessage(el.manualOrderMessage, "Each item needs a valid price of $0 or more.", "error");
     return;
   }
 
