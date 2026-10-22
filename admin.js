@@ -75,12 +75,7 @@ const el = {
   extraBakeId: document.querySelector("#extra-bake-id"),
   extraBakeDate: document.querySelector("#extra-bake-date"),
   extraBakeBatch: document.querySelector("#extra-bake-batch"),
-  extraBakeProduct: document.querySelector("#extra-bake-product"),
-  extraBakeName: document.querySelector("#extra-bake-name"),
-  extraBakeCustomField: document.querySelector("#extra-bake-custom-field"),
-  extraBakeQuantity: document.querySelector("#extra-bake-quantity"),
-  extraBakeCapacity: document.querySelector("#extra-bake-capacity"),
-  extraBakeNote: document.querySelector("#extra-bake-note"),
+  extraBakeItems: document.querySelector("#extra-bake-items"),
   extraBakeTotal: document.querySelector("#extra-bake-total"),
   extraBakeMessage: document.querySelector("#extra-bake-message"),
   pickupDatesList: document.querySelector("#pickup-dates-list"),
@@ -391,9 +386,17 @@ el.clearAllLabels.addEventListener("click", () => setLabelReviewChecked(false));
 el.printSelectedLabels.addEventListener("click", printSelectedLabels);
 el.labelReviewList.addEventListener("change", updateLabelReviewCount);
 el.extraBakeForm.addEventListener("submit", saveExtraBakeItem);
-el.extraBakeProduct.addEventListener("change", syncExtraBakeFields);
-el.extraBakeQuantity.addEventListener("input", updateExtraBakeTotal);
-el.extraBakeCapacity.addEventListener("input", updateExtraBakeTotal);
+el.extraBakeItems.addEventListener("change", event => {
+  if (event.target.matches("[data-extra-product]")) syncExtraBakeFields(event.target.closest("[data-extra-row]"));
+});
+el.extraBakeItems.addEventListener("input", updateExtraBakeTotal);
+el.extraBakeItems.addEventListener("click", event => {
+  if (!event.target.closest("[data-remove-extra-row]")) return;
+  event.target.closest("[data-extra-row]").remove();
+  if (!el.extraBakeItems.children.length) addExtraBakeRow();
+  updateExtraBakeTotal();
+});
+document.querySelector("#extra-bake-add-item").addEventListener("click", () => addExtraBakeRow());
 document.querySelector("#extra-bake-clear").addEventListener("click", clearExtraBakeForm);
 el.labelReviewList.addEventListener("keydown", event => {
   if (event.target.matches("[data-label-note-index]")) {
@@ -1211,40 +1214,66 @@ async function loadExtraBakeItems() {
 
 function renderExtraBakeFormOptions() {
   const dateId = el.extraBakeDate.value;
-  const productId = el.extraBakeProduct.value;
+  const rows = extraBakeDraftItems();
   el.extraBakeDate.innerHTML = '<option value="">Choose a bake date</option>' + adminPickupDateOptions(dateId);
   if (state.pickupDates.some(date => date.id === dateId)) el.extraBakeDate.value = dateId;
-  const edited = state.extraBakeItems.find(item => item.id === el.extraBakeId.value);
-  el.extraBakeProduct.innerHTML = '<option value="">Choose product</option>' + state.products
-    .filter(product => product.category !== "Bath & Body" && (!product.archived || product.id === edited?.product_id))
-    .slice().sort((a, b) => compareText(productAdminDisplayName(a), productAdminDisplayName(b)))
-    .map(product => `<option value="${escapeAttribute(product.id)}">${escapeHtml(productAdminDisplayName(product))}</option>`).join("")
-    + '<option value="other">Other / custom item</option>';
-  if (productId === "other" || state.products.some(product => product.id === productId)) {
-    el.extraBakeProduct.value = productId;
-  }
-  syncExtraBakeFields();
+  el.extraBakeItems.innerHTML = "";
+  (rows.length ? rows : [{}]).forEach(item => addExtraBakeRow(item));
 }
 
-function syncExtraBakeFields() {
-  const isCustom = el.extraBakeProduct.value === "other";
-  const product = state.products.find(item => item.id === el.extraBakeProduct.value);
-  el.extraBakeCustomField.hidden = !isCustom;
-  el.extraBakeName.required = isCustom;
-  el.extraBakeCapacity.readOnly = !isCustom;
-  if (product) el.extraBakeCapacity.value = Number(product.capacity_units || 0);
+function extraBakeDraftItems() {
+  return [...el.extraBakeItems.querySelectorAll("[data-extra-row]")].map(row => ({
+    product_id: row.querySelector("[data-extra-product]").value || "",
+    item_name: row.querySelector("[data-extra-name]").value,
+    quantity: Number(row.querySelector("[data-extra-quantity]").value),
+    capacity_units: Number(row.querySelector("[data-extra-capacity]").value),
+    note: row.querySelector("[data-extra-note]").value
+  }));
+}
+
+function addExtraBakeRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "extra-bake-fields extra-bake-item-row";
+  row.setAttribute("data-extra-row", "");
+  row.innerHTML = `
+    <label>Product<select data-extra-product required>
+      <option value="">Choose product</option>
+      ${state.products.filter(product => product.category !== "Bath & Body" && (!product.archived || product.id === item.product_id))
+        .slice().sort((a, b) => compareText(productAdminDisplayName(a), productAdminDisplayName(b)))
+        .map(product => `<option value="${escapeAttribute(product.id)}">${escapeHtml(productAdminDisplayName(product))}</option>`).join("")}
+      <option value="other">Other / custom item</option>
+    </select></label>
+    <label data-extra-custom-field hidden>Custom item<input data-extra-name value="${escapeAttribute(item.item_name || "")}" /></label>
+    <label>Quantity<input data-extra-quantity type="number" min="1" step="1" value="${Number(item.quantity || 1)}" required /></label>
+    <label>Loaf spots each<input data-extra-capacity type="number" min="0" step="1" value="${Number(item.capacity_units ?? 1)}" required /></label>
+    <button type="button" class="secondary-button compact-button" data-remove-extra-row>Remove item</button>
+    <label class="extra-bake-note-field">Label note<textarea data-extra-note rows="2" placeholder="Optional requests/notes">${escapeHtml(item.note || "")}</textarea></label>
+  `;
+  el.extraBakeItems.append(row);
+  row.querySelector("[data-extra-product]").value = item.product_id || (item.item_name ? "other" : "");
+  syncExtraBakeFields(row);
+}
+
+function syncExtraBakeFields(row) {
+  const productId = row.querySelector("[data-extra-product]").value;
+  const isCustom = productId === "other";
+  const product = state.products.find(item => item.id === productId);
+  row.querySelector("[data-extra-custom-field]").hidden = !isCustom;
+  row.querySelector("[data-extra-name]").required = isCustom;
+  row.querySelector("[data-extra-capacity]").readOnly = !isCustom;
+  if (product) row.querySelector("[data-extra-capacity]").value = Number(product.capacity_units || 0);
   updateExtraBakeTotal();
 }
 
 function updateExtraBakeTotal() {
-  const quantity = Number(el.extraBakeQuantity.value || 0);
-  const units = Number(el.extraBakeCapacity.value || 0);
-  el.extraBakeTotal.textContent = `Reserves ${quantity * units} loaf spots.`;
+  const spots = extraBakeDraftItems().reduce((sum, item) => sum + item.quantity * item.capacity_units, 0);
+  el.extraBakeTotal.textContent = `Reserves ${spots} loaf spots.`;
 }
 
 function clearExtraBakeForm() {
   el.extraBakeForm.reset();
   el.extraBakeId.value = "";
+  el.extraBakeItems.innerHTML = "";
   renderExtraBakeFormOptions();
 }
 
@@ -1252,41 +1281,50 @@ async function saveExtraBakeItem(event) {
   event.preventDefault();
   const submit = el.extraBakeForm.querySelector('[type="submit"]');
   submit.disabled = true;
-  setMessage(el.extraBakeMessage, "Saving extra bake item...");
+  setMessage(el.extraBakeMessage, "Saving extra bake batch...");
   try {
-    const { error } = await supabaseClient.rpc("admin_save_extra_bake_item", {
-      p_id: el.extraBakeId.value || null,
+    const { error } = await supabaseClient.rpc("admin_save_extra_bake_batch", {
+      p_batch_id: el.extraBakeId.value || null,
       p_pickup_date_id: el.extraBakeDate.value,
-      p_product_id: el.extraBakeProduct.value === "other" ? null : el.extraBakeProduct.value,
-      p_item_name: el.extraBakeName.value.trim(),
       p_batch_name: el.extraBakeBatch.value.trim(),
-      p_quantity: Number(el.extraBakeQuantity.value),
-      p_capacity_units: Number(el.extraBakeCapacity.value),
-      p_note: el.extraBakeNote.value.trim()
+      p_items: extraBakeDraftItems().map(item => ({
+        ...item, product_id: item.product_id === "other" ? null : item.product_id,
+        item_name: item.item_name.trim(), note: item.note.trim()
+      }))
     });
     if (error) throw error;
     clearExtraBakeForm();
     await Promise.all([loadOrders(), loadPickupDates()]);
-    setMessage(el.extraBakeMessage, "Extra bake item saved.", "success");
+    setMessage(el.extraBakeMessage, "Extra bake batch saved.", "success");
   } catch (error) {
-    setMessage(el.extraBakeMessage, error.message || "Could not save extra bake item.", "error");
+    setMessage(el.extraBakeMessage, error.message || "Could not save extra bake batch.", "error");
   } finally {
     submit.disabled = false;
   }
 }
 
+function extraBakeGroups(items) {
+  const groups = new Map();
+  items.forEach(item => {
+    const id = item.batch_id || item.id;
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(item);
+  });
+  return [...groups.entries()];
+}
+
 function extraBakeListMarkup(items) {
   if (!items.length) return "";
-  return `<section class="extra-bake-list" aria-label="Extra bake items">
-    <h4>Extra bake items</h4>
-    ${items.map(item => `<article class="extra-bake-row">
-      <div><strong>${escapeHtml(item.batch_name)} - ${escapeHtml(item.item_name)}</strong>
-        <p>Qty ${item.quantity} &middot; ${item.quantity * item.capacity_units} loaf spots</p>
-        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}</div>
+  return `<section class="extra-bake-list" aria-label="Extra bake batches">
+    <h4>Extra bake batches</h4>
+    ${extraBakeGroups(items).map(([batchId, batch]) => `<article class="extra-bake-row">
+      <div><strong>${escapeHtml(batch[0].batch_name)}</strong>
+        ${batch.map(item => `<p>${escapeHtml(item.item_name)} &times; ${item.quantity}${item.note ? ` - ${escapeHtml(item.note)}` : ""}</p>`).join("")}
+        <p>${batch.reduce((sum, item) => sum + item.quantity * item.capacity_units, 0)} loaf spots</p></div>
       <div class="toolbar-actions">
-        <button type="button" class="secondary-button compact-button" data-extra-bake-action="print" data-extra-bake-id="${item.id}">Print labels</button>
-        <button type="button" class="secondary-button compact-button" data-extra-bake-action="edit" data-extra-bake-id="${item.id}">Edit</button>
-        <button type="button" class="secondary-button compact-button" data-extra-bake-action="remove" data-extra-bake-id="${item.id}">Remove</button>
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="print" data-extra-bake-id="${batchId}">Print labels</button>
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="edit" data-extra-bake-id="${batchId}">Edit batch</button>
+        <button type="button" class="secondary-button compact-button" data-extra-bake-action="remove" data-extra-bake-id="${batchId}">Remove batch</button>
       </div>
     </article>`).join("")}
   </section>`;
@@ -1315,40 +1353,38 @@ function extraBakeLabelsFor(items) {
 
 async function handleExtraBakeAction(event) {
   const button = event.currentTarget;
-  const item = state.extraBakeItems.find(item => item.id === button.dataset.extraBakeId);
-  if (!item) return;
+  const batchId = button.dataset.extraBakeId;
+  const batch = state.extraBakeItems.filter(item => (item.batch_id || item.id) === batchId);
+  if (!batch.length) return;
+  const item = batch[0];
   const action = button.dataset.extraBakeAction;
   if (action === "print") {
-    openLabelReview(extraBakeLabelsFor([item]), `Extra bake labels for ${item.batch_name}`);
+    openLabelReview(extraBakeLabelsFor(batch), `Extra bake labels for ${item.batch_name}`);
     return;
   }
   if (action === "edit") {
-    el.extraBakeId.value = item.id;
+    el.extraBakeId.value = batchId;
     renderExtraBakeFormOptions();
     el.extraBakeDate.value = item.pickup_date_id;
-    el.extraBakeProduct.value = item.product_id || "other";
     el.extraBakeBatch.value = item.batch_name;
-    el.extraBakeName.value = item.item_name;
-    el.extraBakeQuantity.value = item.quantity;
-    el.extraBakeCapacity.value = item.capacity_units;
-    el.extraBakeNote.value = item.note;
-    syncExtraBakeFields();
+    el.extraBakeItems.innerHTML = "";
+    batch.forEach(entry => addExtraBakeRow(entry));
     const box = document.querySelector("#extra-bake-box");
     box.open = true;
     box.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
-  if (!window.confirm(`Remove ${item.quantity} x ${item.item_name} from the bake list and release its loaf spots?`)) return;
+  if (!window.confirm(`Remove the ${item.batch_name} bake batch and release its loaf spots?`)) return;
   button.disabled = true;
   try {
-    const { error } = await supabaseClient.rpc("admin_remove_extra_bake_item", { p_id: item.id });
+    const { error } = await supabaseClient.rpc("admin_remove_extra_bake_batch", { p_batch_id: batchId });
     if (error) throw error;
-    if (el.extraBakeId.value === item.id) clearExtraBakeForm();
+    if (el.extraBakeId.value === batchId) clearExtraBakeForm();
     await Promise.all([loadOrders(), loadPickupDates()]);
-    setMessage(el.extraBakeMessage, "Extra bake item removed; loaf spots released.", "success");
+    setMessage(el.extraBakeMessage, "Extra bake batch removed; loaf spots released.", "success");
   } catch (error) {
     button.disabled = false;
-    setMessage(el.extraBakeMessage, error.message || "Could not remove extra bake item.", "error");
+    setMessage(el.extraBakeMessage, error.message || "Could not remove extra bake batch.", "error");
   }
 }
 
@@ -1484,7 +1520,7 @@ function bakingBreakdownMarkup(orders, extras = []) {
   const countableOrders = orders.filter(order => order.fulfillment_status !== "canceled");
   const weeklyIncomeCents = countableOrders.reduce((sum, order) => sum + Number(order.total_cents || 0), 0);
 
-  countableOrders.forEach(order => {
+  [...countableOrders, { items: extras.map(extraBakeBreakdownItem) }].forEach(order => {
     (order.items || []).forEach(item => {
       const itemName = adminItemName(item);
       const targetTotals = isBreadLoafItem(item) ? breadTotals : treatTotals;
@@ -1519,13 +1555,21 @@ function bakingBreakdownMarkup(orders, extras = []) {
         ${breakdownTableMarkup("Bread loaf orders", breadItems)}
         ${breakdownTableMarkup("Mini loaves for flight boxes", miniLoafItems)}
         ${breakdownTableMarkup("Other Delicious Treats", treatItems)}
-        ${extras.length ? breakdownTableMarkup("Extra bake items", sortedBreakdownItems(extras.reduce((map, item) => {
-          map.set(item.item_name, (map.get(item.item_name) || 0) + Number(item.quantity));
-          return map;
-        }, new Map()))) : ""}
       </div>
     </aside>
   `;
+}
+
+function extraBakeBreakdownItem(item) {
+  const product = state.products.find(product => product.id === item.product_id);
+  return {
+    ...product,
+    name: item.item_name,
+    quantity: item.quantity,
+    capacity_units: item.capacity_units,
+    item_note: item.note,
+    product_type: item.is_flight_box ? "flight_box" : "standard"
+  };
 }
 
 function bakingBreakdownHeaderMarkup(weeklyIncomeCents) {
