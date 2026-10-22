@@ -37,6 +37,13 @@ The check uses mocked RPC responses and does not write to Supabase.
 
 ## Files
 
+The wedding gift certificate in `gift-certificates/focaccia-wedding.html` uses
+`K&C-LAW` for one free focaccia through January 31, 2027 (Pacific time).
+Run `supabase-focaccia-gift-certificate.sql` in Supabase SQL Editor before
+publishing the checkout update. This issues the one-use code and adds
+server-side product restrictions; editing the printable certificate alone
+does not activate redemption. Other cart items remain chargeable.
+
 - `index.html` - static GitHub Pages page
 - `styles.css` - responsive design
 - `app.js` - Supabase connection, store settings, ordering flow

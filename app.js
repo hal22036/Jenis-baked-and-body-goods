@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261014-flight-box-limit";
+const ASSET_VERSION = "20261021-gift-certificates";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -1341,7 +1341,8 @@ async function applyCouponCode() {
   const { data, error } = await supabaseClient.rpc("validate_coupon_code", {
     p_coupon_code: code,
     p_subtotal_cents: subtotal,
-    p_fulfillment_method: fulfillmentMethod()
+    p_fulfillment_method: fulfillmentMethod(),
+    p_items: selectedItemsWithDetails().map(item => ({ product_id: item.product_id, quantity: item.quantity }))
   });
 
   el.applyCoupon.disabled = false;
@@ -2378,6 +2379,8 @@ async function submitReviewedOrder() {
     const message = databaseNeedsRewardUpgrade && state.reward
       ? "Rewards are temporarily unavailable. Please try again after the checkout update is complete."
       : errorMessage.toLowerCase().includes("reward")
+        ? errorMessage
+      : /coupon|gift certificate/i.test(errorMessage)
         ? errorMessage
       : databaseNeedsTipUpgrade && tipCents() > 0
       ? "Optional tips are temporarily unavailable. Please remove the tip and place your order again."

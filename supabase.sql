@@ -949,10 +949,14 @@ drop function if exists public.admin_list_rewards();
 drop function if exists public.get_customer_rewards(text);
 drop function if exists public.normalize_customer_phone(text);
 
+alter table public.coupons
+add column if not exists required_product_id uuid references public.products(id);
+
 create or replace function public.validate_coupon_code(
   p_coupon_code text,
   p_subtotal_cents integer,
-  p_fulfillment_method text default 'pickup'
+  p_fulfillment_method text,
+  p_items jsonb
 )
 returns table(
   code text,
@@ -973,6 +977,8 @@ declare
   v_discount_base integer;
   v_used_count integer;
   v_discount integer;
+  v_gift_price integer;
+  v_gift_name text;
   v_fulfillment_method text;
 begin
   v_code := upper(trim(coalesce(p_coupon_code, '')));
@@ -988,8 +994,9 @@ begin
   from public.coupons c
   where c.code = v_code
     and c.active = true
-    and (c.starts_on is null or c.starts_on <= current_date)
-    and (c.ends_on is null or c.ends_on >= current_date);
+    and (c.starts_on is null or c.starts_on <= (now() at time zone 'America/Los_Angeles')::date)
+    and (c.ends_on is null or c.ends_on >= (now() at time zone 'America/Los_Angeles')::date)
+  for update;
 
   if not found then
     raise exception 'Coupon code is not valid';
@@ -1036,7 +1043,27 @@ begin
     end if;
   end if;
 
-  if v_coupon.discount_type = 'percent' then
+  if v_coupon.required_product_id is not null then
+    select p.price_cents, p.name into v_gift_price, v_gift_name
+    from public.products p
+    where p.id = v_coupon.required_product_id and p.active and not p.archived;
+
+    if not found then raise exception 'The gift certificate item is not currently available'; end if;
+    if jsonb_typeof(p_items) is distinct from 'array' then
+      raise exception 'Add the gift certificate item to your cart and apply the code again';
+    end if;
+    if not exists (
+      select 1 from jsonb_array_elements(p_items) item
+      where item->>'product_id' = v_coupon.required_product_id::text
+        and coalesce(item->>'quantity', '') ~ '^[1-9][0-9]*$'
+    ) then
+      raise exception 'Add % to your cart to use this gift certificate', v_gift_name;
+    end if;
+    if v_coupon.applies_to <> 'items' then
+      raise exception 'Free-item certificates must apply to items';
+    end if;
+    v_discount := v_gift_price;
+  elsif v_coupon.discount_type = 'percent' then
     v_discount := floor(v_discount_base * v_coupon.percent_off / 100.0)::integer;
   else
     v_discount := v_coupon.amount_off_cents;
@@ -1053,6 +1080,23 @@ begin
     greatest(v_subtotal + v_shipping_cents - v_discount, 0);
 end;
 $$;
+
+create or replace function public.validate_coupon_code(
+  p_coupon_code text,
+  p_subtotal_cents integer,
+  p_fulfillment_method text default 'pickup'
+)
+returns table(code text, description text, applies_to text,
+  discount_cents integer, final_total_cents integer)
+language sql security definer set search_path = public
+as $$
+  select * from public.validate_coupon_code(
+    p_coupon_code, p_subtotal_cents, p_fulfillment_method, null::jsonb
+  );
+$$;
+
+revoke all on function public.validate_coupon_code(text,integer,text,jsonb) from public;
+grant execute on function public.validate_coupon_code(text,integer,text,jsonb) to anon, authenticated;
 
 create or replace function public.calculate_order_totals(
   p_subtotal_cents integer,
@@ -1558,7 +1602,8 @@ begin
     from public.validate_coupon_code(
       v_coupon_code,
       greatest(v_total - v_bundle_discount, 0),
-      v_fulfillment_method
+      v_fulfillment_method,
+      p_items
     );
 
     v_coupon_code := v_coupon.code;
@@ -3491,8 +3536,8 @@ begin
     raise exception 'Coupon code is required';
   end if;
 
-  if v_code !~ '^[A-Z0-9_-]+$' then
-    raise exception 'Coupon code can only use letters, numbers, underscores, and dashes';
+  if v_code !~ '^[A-Z0-9_&-]+$' then
+    raise exception 'Coupon code can only use letters, numbers, ampersands, underscores, and dashes';
   end if;
 
   if v_discount_type not in ('percent', 'amount') then
