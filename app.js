@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261022-bath-bomb-lead-time";
+const ASSET_VERSION = "20261022-scrub-bundle";
 
 function bathBombLeadTimeMarkup(items) {
   if (!items.some(item => /\bbath bombs?\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
@@ -368,7 +368,14 @@ function foamingHandSoapBundleDiscountCents() {
 }
 
 function productBundleDiscountCents() {
-  return bathBombBundleDiscountCents() + foamingHandSoapBundleDiscountCents();
+  return bathBombBundleDiscountCents() + foamingHandSoapBundleDiscountCents() + sugarScrubBundleDiscountCents();
+}
+
+function sugarScrubBundleDiscountCents() {
+  const quantity = state.products.reduce((sum, product) =>
+    cleanText(product.display_group).toLowerCase() === "whipped sugar scrub"
+      ? sum + Number(state.quantities[product.id] || 0) : sum, 0);
+  return Math.floor(quantity / 2) * 200;
 }
 
 function isBathBombGroup(groupName) {
@@ -376,6 +383,9 @@ function isBathBombGroup(groupName) {
 }
 
 function productPromoMarkup(groupName) {
+  if (cleanText(groupName).toLowerCase() === "whipped sugar scrub") {
+    return `<div class="product-promo-banner"><strong>$6 each or mix and match 2 for $10.</strong><span>Discount reflects at checkout.</span></div>`;
+  }
   if (isBathBombGroup(groupName)) {
     return `
       <div class="product-promo-banner">
@@ -2240,17 +2250,10 @@ function renderCheckoutReview() {
     </div>
     ${bathBombLeadTimeMarkup(items)}
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(details.notes)}</p>` : ""}
-    <div class="satisfaction-notice invoice-satisfaction-notice" role="note">
-      <strong>Customer satisfaction</strong>
-      <p>
-        Your order matters to me. Because each item is made to order, refunds are not available.
-        If something is wrong with your order, please reach out as soon as possible so I can help
-        make it right with a replacement item of equal or lesser value when appropriate.
-      </p>
-    </div>
     <div class="summary">
       <div class="total-lines">
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
+        ${sugarScrubBundleDiscountCents() ? `<div class="discount-line"><span>Sugar scrub deal</span><span>-${money(sugarScrubBundleDiscountCents())}</span></div>` : ""}
         ${bathBombBundleDiscountCents() ? `
           <div class="discount-line">
             <span>Bath bomb deal</span>
@@ -2556,6 +2559,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
       <div class="total-lines">
         <div><span>Subtotal</span><span>${money(selectedTotalCents())}</span></div>
         ${bathBombBundleDiscountCents() ? `<div class="discount-line"><span>Bath bomb deal</span><span>-${money(bathBombBundleDiscountCents())}</span></div>` : ""}
+        ${sugarScrubBundleDiscountCents() ? `<div class="discount-line"><span>Sugar scrub deal</span><span>-${money(sugarScrubBundleDiscountCents())}</span></div>` : ""}
         ${foamingHandSoapBundleDiscountCents() ? `<div class="discount-line"><span>Foaming hand soap deal</span><span>-${money(foamingHandSoapBundleDiscountCents())}</span></div>` : ""}
         ${coupon ? `<div class="discount-line"><span>Coupon ${coupon.code} (${couponAppliesToLabel(coupon.applies_to)})</span><span>-${money(coupon.discount_cents)}</span></div>` : ""}
         ${reward ? `<div class="discount-line"><span>${rewardLabel(reward.type)}</span><span>-${money(reward.discount_cents)}</span></div>` : ""}

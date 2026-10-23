@@ -46,6 +46,16 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#reward-banner").isVisible(), false);
     assert.match(await page.locator("#product-list").innerText(), /Foaming Hand Soap/);
     assert.match(await page.locator("#product-list").innerText(), /Whipped Sugar Scrub - 4 oz/);
+    assert.match(await page.locator("#product-list").innerText(), /\$6 each or mix and match 2 for \$10/);
+    const scrubDiscounts = await page.evaluate(() => {
+      const discounts = [0, 1, 2, 3, 4, 5].map(quantity => {
+        state.quantities.scrub = quantity;
+        return sugarScrubBundleDiscountCents();
+      });
+      state.quantities.scrub = 0;
+      return discounts;
+    });
+    assert.deepEqual(scrubDiscounts, [0, 0, 200, 200, 400, 400]);
     assert.equal(await page.locator("#product-list").getByText(/Please allow 4-5 days/).count(), 1);
     assert.equal(await page.locator(".product-options-disclosure > summary").allTextContents().then(labels => labels.every(label => label.includes("View scent options"))), true);
     await page.locator(".product-options-disclosure > summary").evaluateAll(summaries => summaries.forEach(summary => summary.click()));
@@ -58,6 +68,7 @@ const { chromium } = require("playwright");
     await page.locator('[data-product-id="soap"][data-action="plus"]').evaluate(button => button.closest(".product-options-disclosure").open = true);
     await page.locator('[data-product-id="soap"][data-action="plus"]').click();
     assert.match(await page.locator("#review-content").innerText(), /Almond/);
+    assert.equal(await page.locator("#review-content .satisfaction-notice").count(), 0);
     await page.locator('[data-shop-collection="baked-goods"]').click();
     assert.equal(await page.locator("#date-section").isVisible(), true);
     assert.equal(await page.locator("#product-list").isVisible(), false);
