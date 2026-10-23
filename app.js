@@ -9,7 +9,12 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261022-bath-body-scents";
+const ASSET_VERSION = "20261022-bath-bomb-lead-time";
+
+function bathBombLeadTimeMarkup(items) {
+  if (!items.some(item => /\bbath bombs?\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
+  return `<div class="satisfaction-notice" role="note"><strong>Bath bombs: made to order</strong><p>Please allow 4-5 days before pickup or shipping so your bath bombs can fully cure.</p></div>`;
+}
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -1856,6 +1861,7 @@ function renderProductCard(products) {
         </div>
       </div>
       ${productPromoMarkup(groupName || primaryProduct.name)}
+      ${bathBombLeadTimeMarkup(sortedProducts)}
       ${groupedProductDescriptionMarkup(sharedDescription)}
       ${optionsMarkup}
     `;
@@ -2232,6 +2238,7 @@ function renderCheckoutReview() {
         </div>
       `).join("")}
     </div>
+    ${bathBombLeadTimeMarkup(items)}
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(details.notes)}</p>` : ""}
     <div class="satisfaction-notice invoice-satisfaction-notice" role="note">
       <strong>Customer satisfaction</strong>
@@ -2535,6 +2542,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
         </div>
       `).join("")}
     </div>
+    ${bathBombLeadTimeMarkup(items)}
     ${details.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(details.notes)}</p>` : ""}
     <div class="satisfaction-notice invoice-satisfaction-notice" role="note">
       <strong>Customer satisfaction</strong>

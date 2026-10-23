@@ -169,6 +169,8 @@ function renderInvoice(order) {
 
     ${order.notes ? `<p class="admin-notes"><strong>Questions/comments:</strong> ${escapeHtml(order.notes)}</p>` : ""}
 
+    ${items.some(item => /\bbath bombs?\b/i.test(itemName(item))) ? `<div class="satisfaction-notice" role="note"><strong>Bath bombs: made to order</strong><p>Please allow 4-5 days before pickup or shipping so your bath bombs can fully cure.</p></div>` : ""}
+
     <div class="allergy-notice invoice-allergy-notice" role="note">
       <strong>Allergy notice</strong>
       <p>
