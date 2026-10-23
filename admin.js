@@ -2619,6 +2619,9 @@ function renderProducts() {
 
       const nameDifference = compareText(productAdminDisplayName(a), productAdminDisplayName(b));
 
+      if (sortMode === "type") {
+        return compareText(a.display_group || productCategory(a), b.display_group || productCategory(b)) || nameDifference;
+      }
       if (sortMode === "name-asc") return nameDifference;
       if (sortMode === "name-desc") return -nameDifference;
       if (sortMode === "price-asc") return Number(a.price_cents || 0) - Number(b.price_cents || 0) || nameDifference;
