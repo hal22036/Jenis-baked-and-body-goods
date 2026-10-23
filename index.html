@@ -9,13 +9,13 @@
   />
   <title>Jeni's Home Made Goods Orders</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-  <link rel="stylesheet" href="styles.css?v=20261006-bath-body-sizes" />
+  <link rel="stylesheet" href="styles.css?v=20261022-photo-shopping" />
 </head>
-<body>
+<body class="storefront">
   <header class="site-header">
     <div class="wrap header-layout">
       <div>
-        <img class="site-logo" src="assets/logo.png" alt="Jeni's Home Baked Goods logo" />
+        <img class="site-logo" src="assets/logo.png" alt="Jeni's Baked &amp; Body Goods" />
         <p class="eyebrow">Fresh baked goods and handmade gifts</p>
         <p data-store-intro>
           Choose a future pickup date, build your order, and submit.
@@ -25,11 +25,26 @@
   </header>
 
   <main class="wrap">
+    <nav class="shop-collections" id="shop-collections" aria-label="Shop by collection">
+      <button type="button" class="shop-collection" data-shop-collection="baked-goods" aria-pressed="false" aria-controls="menu-section" disabled>
+        <img class="shop-collection-photo" src="assets/classic_white.PNG" alt="Jeni's freshly baked sourdough bread" width="600" height="400" fetchpriority="high" />
+        <span class="shop-collection-caption"><strong>Baked Goods</strong><span>Bread, mini loaf flights &amp; treats</span><span class="shop-collection-action">Shop baked goods <span aria-hidden="true">&rarr;</span></span></span>
+      </button>
+      <button type="button" class="shop-collection" data-shop-collection="bath-body" aria-pressed="false" aria-controls="menu-section" disabled>
+        <span class="shop-body-photos" aria-hidden="true">
+          <img src="assets/foaming_soap.png" alt="" width="400" height="400" />
+          <img src="assets/sugar_scrub.png" alt="" width="300" height="200" />
+          <img src="assets/bath_bombs.png" alt="" width="300" height="200" />
+        </span>
+        <span class="shop-collection-caption"><strong>Bath &amp; Body</strong><span>Handmade soaps, scrubs &amp; bath bombs</span><span class="shop-collection-action">Shop bath &amp; body <span aria-hidden="true">&rarr;</span></span></span>
+      </button>
+    </nav>
+    <p id="shop-status" class="shop-status muted" role="status">Loading shop...</p>
     <section class="panel" id="menu-section" aria-labelledby="menu-heading" hidden>
       <div class="section-row">
         <div>
           <p class="step">Shop</p>
-          <h2 id="menu-heading">Choose your items</h2>
+          <h2 id="menu-heading" tabindex="-1">Choose your items</h2>
           <p id="capacity-message" class="muted"></p>
         </div>
         <div class="capacity-pill">
@@ -269,6 +284,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20261021-gift-certificates"></script>
+  <script src="app.js?v=20261022-photo-shopping"></script>
 </body>
 </html>

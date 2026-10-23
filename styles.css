@@ -77,6 +77,163 @@ button {
   font-size: 1.05rem;
 }
 
+.storefront .site-header {
+  padding: 22px 0 20px;
+}
+
+.storefront .site-logo {
+  width: 160px;
+  max-width: 45%;
+  margin-bottom: 10px;
+  filter: none;
+}
+
+.storefront .site-header p:not(.eyebrow) {
+  font-size: 0.95rem;
+}
+
+.shop-collections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0 0 24px;
+}
+
+.shop-collections[hidden] {
+  display: none;
+}
+
+.shop-collection {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shop-collection:hover,
+.shop-collection[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.shop-collection[data-shop-collection="bath-body"]:hover,
+.shop-collection[data-shop-collection="bath-body"][aria-pressed="true"] {
+  border-color: #3f705b;
+  box-shadow: 0 0 0 2px #e1eee7;
+}
+
+.shop-collection:disabled {
+  cursor: wait;
+}
+
+.shop-collection-photo,
+.shop-body-photos {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  height: auto;
+  object-fit: cover;
+}
+
+.shop-body-photos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3px;
+  overflow: hidden;
+}
+
+.shop-body-photos img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+
+.shop-body-photos img:first-child {
+  grid-row: 1 / -1;
+}
+
+.shop-collection-caption {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 18px 20px;
+  overflow-wrap: anywhere;
+}
+
+.shop-collection-caption > strong {
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.shop-collection-caption > span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.shop-collection-caption .shop-collection-action {
+  margin-top: 7px;
+  color: var(--accent-dark);
+  font-weight: 800;
+}
+
+[data-shop-collection="bath-body"] .shop-collection-action {
+  color: #315c47;
+}
+
+.shop-status {
+  margin: 0 0 20px;
+  text-align: center;
+}
+
+.shop-status:empty {
+  display: none;
+}
+
+#menu-section {
+  scroll-margin-top: 18px;
+}
+
+@media (max-width: 600px) {
+  .storefront .site-header {
+    padding: 16px 0;
+  }
+
+  .storefront .site-logo {
+    width: 130px;
+  }
+
+  .shop-collections {
+    gap: 10px;
+  }
+
+  .shop-collection-photo,
+  .shop-body-photos {
+    aspect-ratio: 1 / 1;
+  }
+
+  .shop-collection-caption {
+    padding: 14px 10px;
+  }
+
+  .shop-collection-caption > strong {
+    font-size: 1.3rem;
+  }
+
+  .shop-collection-caption > span {
+    font-size: 0.8rem;
+  }
+}
+
 .order-cutoff-notice {
   max-width: 720px;
   margin: 0 auto 22px;

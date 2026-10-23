@@ -9,12 +9,12 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261021-gift-certificates";
+const ASSET_VERSION = "20261022-photo-shopping";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
   intro:
-    "Small-batch goods made to order. Choose Baked Goods for Friday pickup items or Bath & Body for handmade gifts.",
+    "Small-batch baked goods and handmade bath & body.",
   pickupWindow: "4-7 pm",
   pickupAddress: "7140 Anchor Terrace St.",
   gateCode: "#7716",
@@ -82,6 +82,7 @@ const state = {
   dates: [],
   products: [],
   activeProductTab: "baked-goods",
+  hasChosenCollection: false,
   selectedDate: null,
   quantities: {},
   itemNotes: {},
@@ -97,6 +98,8 @@ const state = {
 };
 
 const el = {
+  shopCollections: document.querySelector("#shop-collections"),
+  shopStatus: document.querySelector("#shop-status"),
   intro: document.querySelector("[data-store-intro]"),
   pickupNote: document.querySelector("[data-pickup-note]"),
   dateList: document.querySelector("#date-list"),
@@ -1215,6 +1218,7 @@ function restoreOrderDraft() {
 
   state.coupon = null;
   state.orderTotals = null;
+  state.hasChosenCollection = Boolean(state.selectedDate || selectedItemsWithDetails().length);
   renderDates();
   renderProducts();
   updateShippingFields();
@@ -1273,10 +1277,33 @@ function syncPageFlow() {
   if (!el.reviewSection.hidden || !el.successSection.hidden) return;
 
   el.dateSection.hidden = !showPickupDates;
-  el.menuSection.hidden = false;
-  el.customerSection.hidden = false;
+  el.menuSection.hidden = !state.hasChosenCollection;
+  el.customerSection.hidden = !state.hasChosenCollection;
+  el.shopCollections.querySelectorAll("[data-shop-collection]").forEach(button => {
+    button.setAttribute("aria-pressed", String(state.hasChosenCollection && button.dataset.shopCollection === state.activeProductTab));
+  });
   safelyRenderCheckoutReview();
 }
+
+function chooseShoppingCollection(tabId, scroll = true) {
+  state.activeProductTab = tabId;
+  state.hasChosenCollection = true;
+  renderProducts();
+  updateSummary();
+  syncPageFlow();
+  saveOrderDraft();
+  if (scroll) {
+    el.menuSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.querySelector("#menu-heading").focus({ preventScroll: true });
+  }
+}
+
+el.shopCollections.querySelectorAll("[data-shop-collection]").forEach(button => {
+  button.addEventListener("click", () => {
+    if (!el.successSection.hidden) return;
+    chooseShoppingCollection(button.dataset.shopCollection);
+  });
+});
 
 function refreshCheckoutReview() {
   if (!el.customerSection.hidden) {
@@ -1384,8 +1411,10 @@ function applyStoreSettings() {
 
 async function loadStore() {
   applyStoreSettings();
+  el.shopStatus.textContent = "Loading shop...";
 
   if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY)) {
+    el.shopStatus.textContent = "The shop is not configured yet. Please check back soon.";
     el.dateStatus.textContent =
       "Add your Supabase URL and anon key in app.js before using the live store.";
     el.dateStatus.className = "error";
@@ -1409,6 +1438,7 @@ async function loadStore() {
     ]);
 
   if (dateError || productError) {
+    el.shopStatus.textContent = "Could not load the shop. Please refresh and try again.";
     console.error(dateError || productError);
     el.dateStatus.textContent = "Could not load the store. Please try again.";
     el.dateStatus.className = "error";
@@ -1418,6 +1448,8 @@ async function loadStore() {
   state.dates = dates || [];
   state.dates = state.dates.filter(isOrderablePickupDate);
   state.products = products || [];
+  el.shopStatus.textContent = "";
+  el.shopCollections.querySelectorAll("[data-shop-collection]").forEach(button => { button.disabled = false; });
 
   renderDates();
   renderProducts();
@@ -1573,10 +1605,7 @@ function renderProductTabs() {
 
   el.productTabs.querySelectorAll("[data-product-tab]").forEach(button => {
     button.addEventListener("click", () => {
-      state.activeProductTab = button.dataset.productTab;
-      renderProducts();
-      updateSummary();
-      syncPageFlow();
+      chooseShoppingCollection(button.dataset.productTab, false);
     });
   });
 }
@@ -2430,6 +2459,7 @@ async function refreshSelectedDate() {
 }
 
 function showSuccess(result, paymentMethod, invoiceRequested, items, details, coupon, reward, totals) {
+  el.shopCollections.hidden = true;
   const payment = STORE_SETTINGS.paymentOptions[paymentMethod];
   const linkIsUsable = /^https?:\/\//.test(payment?.link || "");
   const paymentAction = linkIsUsable
@@ -2561,6 +2591,8 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
 }
 
 async function startAnotherOrder() {
+  state.hasChosenCollection = false;
+  el.shopCollections.hidden = false;
   state.lastOrder = null;
   state.selectedDate = null;
   state.quantities = {};
