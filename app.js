@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261022-photo-shopping";
+const ASSET_VERSION = "20261022-bath-body-scents";
 
 const STORE_SETTINGS = {
   bakeryName: "Jeni's Home Made Goods",
@@ -600,6 +600,10 @@ function cardTitleFor(product) {
     return "Foaming Hand Soap - 8 oz";
   }
 
+  if (normalizedGroup === "whipped sugar scrub") {
+    return "Whipped Sugar Scrub - 4 oz";
+  }
+
   return groupName || cleanText(product.name);
 }
 
@@ -735,10 +739,8 @@ function optionDescriptionMarkup(product, sharedDescription = "") {
 
   if (!text || text.toLowerCase() === cleanText(sharedDescription).toLowerCase()) return "";
 
-  const summary = cleanText(product?.display_group).toLowerCase() === "foaming hand soap"
+  const summary = productTabFor(product) === "bath-body"
     ? "Scent notes"
-    : productTabFor(product) === "bath-body"
-    ? "Scent & product details"
     : "Ingredients & allergens";
 
   return `
@@ -1824,9 +1826,7 @@ function renderProductCard(products) {
       (sum, product) => sum + Number(state.quantities[product.id] || 0),
       0
     );
-    const optionDisclosureLabel = cleanText(groupName).toLowerCase() === "whipped sugar scrub"
-      ? "View scent & size options"
-      : "View scent options";
+    const optionDisclosureLabel = "View scent options";
     const optionsMarkup = isBathBodyCard
       ? `
         <details class="product-options-disclosure" ${selectedOptionCount > 0 ? "open" : ""}>

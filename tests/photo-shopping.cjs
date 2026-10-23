@@ -17,7 +17,9 @@ const { chromium } = require("playwright");
         from: table => {
           const data = table === "products" ? [
             { id: "bread", name: "Classic White", price_cents: 1000, capacity_units: 1, category: "Everyday", product_type: "standard", image_url: "assets/classic_white.PNG", active: true },
-            { id: "soap", name: "Foaming Hand Soap - Almond", display_group: "Foaming Hand Soap", option_label: "Almond", price_cents: 1000, capacity_units: 0, category: "Bath & Body", product_type: "standard", image_url: "assets/foaming_soap.png", active: true }
+            { id: "soap", name: "Foaming Hand Soap - Almond", display_group: "Foaming Hand Soap", option_label: "Almond", price_cents: 1000, capacity_units: 0, category: "Bath & Body", product_type: "standard", image_url: "assets/foaming_soap.png", active: true },
+            { id: "scrub", name: "Whipped Sugar Scrub - 4 oz - Almond", display_group: "Whipped Sugar Scrub", option_label: "Almond", description: "Top: Citrus, Almond", price_cents: 500, capacity_units: 0, category: "Bath & Body", track_inventory: false, inventory_quantity: 0, active: true },
+            { id: "bomb", name: "Bath Bombs - 4 oz - Almond", display_group: "Bath Bombs", option_label: "Almond", description: "Top: Citrus, Almond", price_cents: 500, capacity_units: 0, category: "Bath & Body", track_inventory: false, inventory_quantity: 0, active: true }
           ] : [{ id: "date", pickup_date: "2026-10-23", capacity: 14, ordered_count: 0, is_open: true }];
           const q = { select: () => q, gte: () => q, eq: () => q, order: () => q, then: resolve => Promise.resolve({ data, error: null }).then(resolve) };
           return q;
@@ -43,7 +45,14 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#date-section").isVisible(), false);
     assert.equal(await page.locator("#reward-banner").isVisible(), false);
     assert.match(await page.locator("#product-list").innerText(), /Foaming Hand Soap/);
-    await page.locator(".product-options-disclosure > summary").click();
+    assert.match(await page.locator("#product-list").innerText(), /Whipped Sugar Scrub - 4 oz/);
+    assert.equal(await page.locator(".product-options-disclosure > summary").allTextContents().then(labels => labels.every(label => label.includes("View scent options"))), true);
+    await page.locator(".product-options-disclosure > summary").evaluateAll(summaries => summaries.forEach(summary => summary.click()));
+    assert.equal(await page.locator("#product-list").getByText("Scent notes", { exact: true }).count(), 2);
+    for (let i = 0; i < 5; i++) await page.locator('[data-product-id="bomb"][data-action="plus"]').click();
+    assert.match(await page.locator("#review-content").innerText(), /Bath Bombs/);
+    for (let i = 0; i < 5; i++) await page.locator('[data-product-id="bomb"][data-action="minus"]').click();
+    await page.locator('[data-product-id="soap"][data-action="plus"]').evaluate(button => button.closest(".product-options-disclosure").open = true);
     await page.locator('[data-product-id="soap"][data-action="plus"]').click();
     assert.match(await page.locator("#review-content").innerText(), /Almond/);
     await page.locator('[data-shop-collection="baked-goods"]').click();
