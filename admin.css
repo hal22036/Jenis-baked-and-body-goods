@@ -838,6 +838,28 @@
   white-space: nowrap;
 }
 
+.product-admin-tools .product-search-scope {
+  grid-column: 1 / -1;
+  order: 4;
+}
+
+.product-admin-tools .product-search-scope input {
+  width: auto;
+}
+
+.manual-flight-choices {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-flight-choices[hidden] { display: none; }
+
+@media (max-width: 600px) {
+  .manual-flight-choices { grid-template-columns: minmax(0, 1fr); }
+}
+
 .product-filter-summary {
   min-height: 24px;
   margin: 8px 0 12px;

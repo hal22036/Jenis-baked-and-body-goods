@@ -79,6 +79,7 @@ const el = {
   rewardsList: document.querySelector("#rewards-list"),
   productAdminTabs: document.querySelector("#product-admin-tabs"),
   productSearch: document.querySelector("#product-search"),
+  productSearchAllTabs: document.querySelector("#product-search-all-tabs"),
   productSort: document.querySelector("#product-sort"),
   clearProductSearch: document.querySelector("#clear-product-search"),
   productFilterSummary: document.querySelector("#product-filter-summary"),
@@ -360,6 +361,7 @@ el.clearCouponForm.addEventListener("click", clearCouponForm);
 el.includeArchived.addEventListener("change", loadOrders);
 el.includeArchivedProducts.addEventListener("change", renderProducts);
 el.productSearch.addEventListener("input", renderProducts);
+el.productSearchAllTabs.addEventListener("change", renderProducts);
 el.productSort.addEventListener("change", renderProducts);
 el.clearProductSearch.addEventListener("click", () => {
   el.productSearch.value = "";
@@ -514,6 +516,7 @@ function addManualItemRow(item = {}) {
       <input data-manual-item-quantity type="number" min="1" step="1" required value="${item.quantity || 1}" />
     </label>
     <div class="manual-product-details" data-manual-product-details hidden></div>
+    <div class="manual-flight-choices" hidden></div>
     <div class="manual-custom-controls">
       <label>
         Price each
@@ -549,7 +552,9 @@ function manualProductOptions(selectedProductId) {
     .sort((a, b) => compareText(manualProductLabel(a), manualProductLabel(b)))
     .map(product => {
       const label = manualProductLabel(product);
-      return `<option value="${product.id}" ${product.id === selectedProductId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      return `<option value="${product.id}" ${product.id === selectedProductId ? "selected" : ""}>${escapeHtml(label)}</option>`
+        + (product.flight_eligible && Number(product.mini_price_cents) > 0
+          ? `<option value="mini:${product.id}" ${"mini:" + product.id === selectedProductId ? "selected" : ""}>${escapeHtml(label)} - Mini</option>` : "");
     })
     .join("");
 }
@@ -558,6 +563,20 @@ function manualProductLabel(product) {
   return product.display_group && product.option_label
     ? `${product.display_group} - ${product.option_label}`
     : product.name;
+}
+
+function manualSelectedProduct(value) {
+  if (!value.startsWith("mini:")) return productById(value);
+  const product = productById(value.slice(5));
+  return product ? { ...product, id: null, name: manualProductLabel(product) + " - Mini",
+    display_group: null, option_label: null, product_type: "standard",
+    price_cents: product.mini_price_cents, capacity_units: 1, track_inventory: false } : null;
+}
+
+function manualFlightPrice(row, product) {
+  if (product?.product_type !== "flight_box") return Number(product?.price_cents || 0);
+  return [...row.querySelectorAll("[data-manual-flight-choice]")].reduce((sum, select) =>
+    sum + Number(productById(select.value)?.mini_price_cents || 0), 0);
 }
 
 function refreshManualProductSelects() {
@@ -648,7 +667,17 @@ function syncManualItemRow(row) {
   const loafSpots = row.querySelector("[data-manual-item-loaf-spots]");
   const customControls = row.querySelector(".manual-custom-controls");
   const productDetails = row.querySelector("[data-manual-product-details]");
-  const product = productById(productSelect.value);
+  const product = manualSelectedProduct(productSelect.value);
+  const choices = row.querySelector(".manual-flight-choices");
+  const isFlight = product?.product_type === "flight_box";
+  choices.hidden = !isFlight;
+  if (isFlight && row.dataset.selectedProductId !== productSelect.value) {
+    const options = state.products.filter(p => p.flight_eligible && !p.archived && Number(p.mini_price_cents) > 0)
+      .sort((a,b) => compareText(manualProductLabel(a), manualProductLabel(b)))
+      .map(p => `<option value="${p.id}">${escapeHtml(manualProductLabel(p))} - ${money(p.mini_price_cents)}</option>`).join("");
+    choices.innerHTML = [1,2,3,4].map(number => `<label>Loaf ${number}<select data-manual-flight-choice required><option value="">Choose mini loaf</option>${options}</select></label>`).join("");
+  }
+  choices.querySelectorAll("select").forEach(select => { select.disabled = !isFlight; });
   const isOther = productSelect.value === "other";
   const previousProductId = row.dataset.selectedProductId || "";
 
@@ -684,7 +713,7 @@ function syncManualItemRow(row) {
 function refreshManualRowTotals(row) {
   const productSelect = row.querySelector("[data-manual-product-select]");
   const productDetails = row.querySelector("[data-manual-product-details]");
-  const product = productById(productSelect.value);
+  const product = manualSelectedProduct(productSelect.value);
 
   if (!product || productDetails.hidden) return;
 
@@ -693,7 +722,7 @@ function refreshManualRowTotals(row) {
   const rowLoafSpots = quantity * loafSpotsEach;
 
   productDetails.innerHTML = `
-    ${el.manualExtraBake.checked ? "" : `<span>Price each: <strong>${money(product.price_cents)}</strong></span>`}
+    ${el.manualExtraBake.checked ? "" : `<span>Price each: <strong>${money(manualFlightPrice(row, product))}</strong></span>`}
     <span>Loaf spots: <strong>${rowLoafSpots}</strong> total (${loafSpotsEach} each)</span>
     ${el.manualExtraBake.checked ? "" : `<span>${taxCategoryLabel(product.tax_category)}</span>`}
     ${!el.manualExtraBake.checked && product.track_inventory ? `<span>${product.inventory_group ? "Shared inventory" : "Inventory"}: <strong>${product.inventory_quantity}</strong> in stock</span>` : ""}
@@ -707,11 +736,11 @@ function manualOrderItems() {
       || row.querySelector("[data-manual-item-note]").value.trim())
     .map(row => {
       const selectedProductId = row.querySelector("[data-manual-product-select]").value;
-      const product = productById(selectedProductId);
+      const product = manualSelectedProduct(selectedProductId);
       const isOther = selectedProductId === "other";
       const quantity = Number(row.querySelector("[data-manual-item-quantity]").value || 0);
       const unitPriceCents = el.manualExtraBake.checked ? 0 : product
-        ? product.price_cents
+        ? manualFlightPrice(row, product)
         : dollarsToCents(row.querySelector("[data-manual-item-price]").value);
       const loafSpotsEach = product
         ? Number(product.capacity_units || 0)
@@ -727,7 +756,13 @@ function manualOrderItems() {
         tax_category: product ? (product.tax_category || "home_bakery") : row.querySelector("[data-manual-item-tax-category]").value,
         loaf_spots: quantity * loafSpotsEach,
         is_other: isOther,
-        item_note: row.querySelector("[data-manual-item-note]").value.trim()
+        item_note: [
+          ...(product?.product_type === "flight_box" ? [...row.querySelectorAll("[data-manual-flight-choice]")].map((select, index) => {
+            const choice = productById(select.value);
+            return choice ? `Loaf ${index + 1}: ${manualProductLabel(choice)} [${centsToDollars(choice.mini_price_cents)}]` : "";
+          }) : []),
+          row.querySelector("[data-manual-item-note]").value.trim()
+        ].filter(Boolean).join("\n")
       };
     })
     .filter(item => item.name || item.quantity || item.unit_price_cents);
@@ -2598,7 +2633,7 @@ function renderProducts() {
   const categoryOrder = activeTab?.categories || [];
   const searchTerm = el.productSearch.value.trim().toLocaleLowerCase();
   const sortMode = el.productSort.value;
-  const visibleProducts = productsForActiveAdminTab()
+  const visibleProducts = (el.productSearchAllTabs.checked ? state.products : productsForActiveAdminTab())
     .filter(product => el.includeArchivedProducts.checked || !product.archived)
     .filter(product => {
       if (!searchTerm) return true;
@@ -2632,7 +2667,7 @@ function renderProducts() {
       return Number(a.sort_order || 0) - Number(b.sort_order || 0) || nameDifference;
     });
 
-  const tabLabel = activeTab?.label || "Products";
+  const tabLabel = el.productSearchAllTabs.checked ? "All" : activeTab?.label || "Products";
   el.productFilterSummary.textContent = `${visibleProducts.length} ${tabLabel.toLocaleLowerCase()} product${visibleProducts.length === 1 ? "" : "s"} shown${searchTerm ? ` for "${el.productSearch.value.trim()}"` : ""}.`;
 
   if (!visibleProducts.length) {
