@@ -59,9 +59,10 @@ const { chromium } = require("playwright");
     assert.deepEqual(scrubDiscounts, [0, 0, 200, 200, 400, 400]);
     assert.equal(await page.locator("#product-list").getByText(/Please allow 4-5 days/).count(), 2);
     assert.equal(await page.locator(".product-options-disclosure > summary").allTextContents().then(labels => labels.every(label => /View .*options/.test(label))), true);
-    await page.locator(".product-options-disclosure > summary").evaluateAll(summaries => summaries.forEach(summary => summary.click()));
+    await page.locator(".product-options-disclosure > summary").evaluateAll(summaries => summaries.forEach(summary => !summary.parentElement.open && summary.click()));
     assert.equal(await page.locator("#product-list").getByText("Scent notes", { exact: true }).count(), 2);
-    await page.locator('[data-product-id="gift"][data-action="plus"]').click();
+    assert.equal(await page.locator('[data-spa-scent]').first().isVisible(),true);
+    assert.equal(await page.locator('[data-qty="gift"]').innerText(),"0");
     assert.equal(await page.locator('[data-spa-scent]').count(),4);
     const chosen = ["Almond & Vanilla", "Be Joyful", "Coconut Lavender", "Watermelon Tide"];
     const scentSelects = await page.locator('[data-spa-scent]').all();
@@ -69,6 +70,13 @@ const { chromium } = require("playwright");
       assert.equal(await scentSelects[i].locator('option').count(),12);
       await scentSelects[i].selectOption(chosen[i]);
     }
+    await page.locator('[data-product-id="gift"][data-action="plus"]').click();
+    assert.deepEqual(await page.locator('[data-spa-scent]').evaluateAll(selects => selects.map(select => select.value)),chosen);
+    for (const width of [1440,390,320]) {
+      await page.setViewportSize({width,height:900});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    }
+    await page.screenshot({path:path.join(process.env.TEST_SCREENSHOT_DIR || os.tmpdir(),"spa-configure-first.png"),fullPage:true});
     assert.match(await page.locator('#review-content').innerText(), /Hand soap: Almond & Vanilla/);
     assert.match(await page.locator('#review-content').innerText(), /Bath bomb 2: Watermelon Tide/);
     assert.equal(await page.evaluate(() => productBundleDiscountCents()),0);

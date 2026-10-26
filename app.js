@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-spa-eleven-scents";
+const ASSET_VERSION = "20261026-spa-configure-first";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -1808,7 +1808,7 @@ function renderProductCard(products) {
       ${state.quantities[primaryProduct.id] > 0 ? itemNoteMarkup(primaryProduct) : ""}
     `;
   } else {
-    const optionTableMarkup = `
+    let optionTableMarkup = `
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>
@@ -1842,6 +1842,22 @@ function renderProductCard(products) {
         <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
       </div>
     `;
+    const isSpaGiftBox = cleanText(groupName).toLowerCase() === "spa gift box";
+    if (isSpaGiftBox) {
+      optionTableMarkup = sortedProducts.map((product, index) => `
+        <details class="spa-box-option" ${index === 0 || state.quantities[product.id] > 0 ? "open" : ""}>
+          <summary><strong>${optionLabelFor(product)}</strong><strong>${money(product.price_cents)}</strong></summary>
+          ${optionDescriptionMarkup(product, sharedDescription)}
+          ${itemNoteMarkup(product)}
+          <div class="spa-box-quantity"><span>Gift boxes</span>
+            <div class="quantity" aria-label="${escapeAttribute(displayNameFor(product))} quantity">
+              <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one gift box">-</button>
+              <span data-qty="${product.id}">${state.quantities[product.id]}</span>
+              <button type="button" data-action="plus" data-product-id="${product.id}" aria-label="Add one gift box">+</button>
+            </div>
+          </div>
+        </details>`).join("");
+    }
     const isBathBodyCard = productTabFor(primaryProduct) === "bath-body";
     const selectedOptionCount = sortedProducts.reduce(
       (sum, product) => sum + Number(state.quantities[product.id] || 0),
@@ -1850,7 +1866,7 @@ function renderProductCard(products) {
     const optionDisclosureLabel = cleanText(groupName).toLowerCase() === "spa gift box" ? "View gift box options" : "View scent options";
     const optionsMarkup = isBathBodyCard
       ? `
-        <details class="product-options-disclosure" ${selectedOptionCount > 0 ? "open" : ""}>
+        <details class="product-options-disclosure" ${isSpaGiftBox || selectedOptionCount > 0 ? "open" : ""}>
           <summary>
             <span>${optionDisclosureLabel}</span>
             <small>${sortedProducts.length} option${sortedProducts.length === 1 ? "" : "s"}</small>

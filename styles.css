@@ -813,6 +813,23 @@ h2 {
   }
 }
 
+.spa-box-option {
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+}
+
+.spa-box-option > summary,
+.spa-box-quantity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.spa-box-option > summary { cursor: pointer; }
+.spa-box-option .item-note-field { display: grid; gap: 12px; margin: 14px 0; }
+.spa-box-option select { width: 100%; min-width: 0; }
+
 .item-note-field {
   display: grid;
   grid-column: 1 / -1;
@@ -1909,9 +1926,11 @@ button.review-place-button:hover,
     grid-column: 2;
   }
 
-  .checkout-review-item {
+  .invoice-items .checkout-review-item {
     display: grid;
-    grid-template-columns: 1fr;
+    min-width: 0;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 
@@ -1926,6 +1945,8 @@ button.review-place-button:hover,
   .checkout-review-controls {
     grid-column: 1;
     width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
     justify-content: space-between;
   }
 
