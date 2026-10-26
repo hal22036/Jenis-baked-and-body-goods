@@ -9,10 +9,10 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-soap-pricing";
+const ASSET_VERSION = "20261026-spa-gift-box";
 
 function bathBombLeadTimeMarkup(items) {
-  if (!items.some(item => /\bbath bombs?\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
+  if (!items.some(item => /\b(?:bath bombs?|spa gift box)\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
   return `<div class="satisfaction-notice" role="note"><strong>Bath bombs: made to order</strong><p>Please allow 4-5 days before pickup or shipping so your bath bombs can fully cure.</p></div>`;
 }
 
@@ -754,7 +754,7 @@ function optionDescriptionMarkup(product, sharedDescription = "") {
 
   if (!text || text.toLowerCase() === cleanText(sharedDescription).toLowerCase()) return "";
 
-  const summary = productTabFor(product) === "bath-body"
+  const summary = cleanText(product?.display_group).toLowerCase() === "spa gift box" ? "Box contents" : productTabFor(product) === "bath-body"
     ? "Scent notes"
     : "Ingredients & allergens";
 
@@ -769,7 +769,7 @@ function optionDescriptionMarkup(product, sharedDescription = "") {
 function groupedProductDescription(products) {
   const primaryProduct = products[0];
   const displayGroup = cleanText(primaryProduct?.display_group).toLowerCase();
-  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub"]);
+  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub", "spa gift box"]);
   if (!supportedGroups.has(displayGroup)) return "";
 
   const descriptions = products
@@ -1841,7 +1841,7 @@ function renderProductCard(products) {
       (sum, product) => sum + Number(state.quantities[product.id] || 0),
       0
     );
-    const optionDisclosureLabel = "View scent options";
+    const optionDisclosureLabel = cleanText(groupName).toLowerCase() === "spa gift box" ? "View gift box options" : "View scent options";
     const optionsMarkup = isBathBodyCard
       ? `
         <details class="product-options-disclosure" ${selectedOptionCount > 0 ? "open" : ""}>
@@ -1889,6 +1889,15 @@ function renderProductCard(products) {
     });
   });
 
+  card.querySelectorAll("[data-spa-scent]").forEach(select => {
+    select.addEventListener("change", () => {
+      const container = select.closest("[data-spa-product]");
+      state.itemNotes[container.dataset.spaProduct] = [...container.querySelectorAll("[data-spa-scent]")]
+        .map(input => input.dataset.spaScent + ": " + input.value).join("\n");
+      saveOrderDraft();
+      refreshCheckoutReview();
+    });
+  });
   card.querySelectorAll("[data-item-note]").forEach(input => {
     input.addEventListener("input", () => {
       state.itemNotes[input.dataset.itemNote] = input.value;
@@ -1901,6 +1910,17 @@ function renderProductCard(products) {
 }
 
 function itemNoteMarkup(product) {
+  if (cleanText(product.display_group).toLowerCase() === "spa gift box") {
+    const count = Number.parseInt(product.option_label, 10) || 1;
+    const fields = [["Hand soap", "foaming hand soap"], ["Sugar scrub", "whipped sugar scrub"],
+      ...Array.from({ length: count }, (_, i) => ["Bath bomb " + (i + 1), "bath bombs"])];
+    const saved = itemNoteFor(product.id).split("\n");
+    return `<div class="item-note-field" data-spa-product="${product.id}">${fields.map(([label, group]) => {
+      const selected = saved.find(line => line.startsWith(label + ": "))?.slice(label.length + 2) || "";
+      const scents = [...new Set(state.products.filter(p => cleanText(p.display_group).toLowerCase() === group).map(p => cleanText(p.option_label)))].filter(Boolean);
+      return `<label>${label} scent<select data-spa-scent="${label}" required><option value="">Choose scent</option>${scents.map(scent => `<option value="${escapeAttribute(scent)}" ${scent === selected ? "selected" : ""}>${escapeHtml(scent)}</option>`).join("")}</select></label>`;
+    }).join("")}</div>`;
+  }
   return `
     <label class="item-note-field">
       Item note
@@ -2347,6 +2367,17 @@ async function submitReviewedOrder() {
     return;
   }
 
+  const missingSpaScent = state.products.some(product => {
+    if (cleanText(product.display_group).toLowerCase() !== "spa gift box" || !state.quantities[product.id]) return false;
+    const count = Number.parseInt(product.option_label, 10) || 1;
+    const labels = ["Hand soap", "Sugar scrub", ...Array.from({ length: count }, (_, i) => "Bath bomb " + (i + 1))];
+    const notes = itemNoteFor(product.id).split("\n");
+    return labels.some(label => !notes.some(line => line.startsWith(label + ": ") && line.slice(label.length + 2).trim()));
+  });
+  if (missingSpaScent) {
+    setMessage("Please choose a scent for every item in your Spa Gift Box.", "error");
+    return;
+  }
   const items = selectedItemsWithDetails().map(item => ({
     product_id: item.product_id,
     quantity: item.quantity,
