@@ -4279,4 +4279,7 @@ update public.products set price_cents = 600
 where lower(trim(display_group)) = 'whipped sugar scrub'
   and not archived;
 
+update public.products set price_cents = 900
+where lower(trim(display_group)) = 'foaming hand soap' and not archived;
+
 notify pgrst, 'reload schema';

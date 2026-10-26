@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261022-scrub-bundle";
+const ASSET_VERSION = "20261026-soap-pricing";
 
 function bathBombLeadTimeMarkup(items) {
   if (!items.some(item => /\bbath bombs?\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
@@ -399,7 +399,7 @@ function productPromoMarkup(groupName) {
 
   return `
     <div class="product-promo-banner">
-      <strong>$10 each or mix and match 2 for $18.</strong>
+      <strong>$9 each or mix and match 2 for $16.</strong>
       <span>Discount reflects at checkout.</span>
     </div>
   `;
