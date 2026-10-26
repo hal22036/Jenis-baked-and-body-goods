@@ -63,13 +63,18 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#product-list").getByText("Scent notes", { exact: true }).count(), 2);
     await page.locator('[data-product-id="gift"][data-action="plus"]').click();
     assert.equal(await page.locator('[data-spa-scent]').count(),4);
-    for (const select of await page.locator('[data-spa-scent]').all()) await select.selectOption("Almond");
-    assert.match(await page.locator('#review-content').innerText(), /Hand soap: Almond/);
-    assert.match(await page.locator('#review-content').innerText(), /Bath bomb 2: Almond/);
+    const chosen = ["Almond & Vanilla", "Be Joyful", "Coconut Lavender", "Watermelon Tide"];
+    const scentSelects = await page.locator('[data-spa-scent]').all();
+    for (let i = 0; i < scentSelects.length; i++) {
+      assert.equal(await scentSelects[i].locator('option').count(),12);
+      await scentSelects[i].selectOption(chosen[i]);
+    }
+    assert.match(await page.locator('#review-content').innerText(), /Hand soap: Almond & Vanilla/);
+    assert.match(await page.locator('#review-content').innerText(), /Bath bomb 2: Watermelon Tide/);
     assert.equal(await page.evaluate(() => productBundleDiscountCents()),0);
     await page.reload();
     await page.waitForSelector('[data-spa-scent]');
-    assert.deepEqual(await page.locator('[data-spa-scent]').evaluateAll(selects => selects.map(select => select.value)),['Almond','Almond','Almond','Almond']);
+    assert.deepEqual(await page.locator('[data-spa-scent]').evaluateAll(selects => selects.map(select => select.value)),chosen);
     await page.locator('[data-product-id="gift"][data-action="minus"]').click();
     await page.locator('[data-product-id="bomb"][data-action="plus"]').evaluate(button => button.closest('details').open = true);
 

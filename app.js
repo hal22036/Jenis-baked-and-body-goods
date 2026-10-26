@@ -9,7 +9,13 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-spa-gift-box";
+const ASSET_VERSION = "20261026-spa-eleven-scents";
+
+const SPA_GIFT_SCENTS = [
+  "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
+  "Coconut Lavender", "Frosted Snowberry", "Hawaiian Sunrise", "Milk Violet",
+  "Pink Raspberry Prosecco", "Spiced Pumpkin & Apple Harvest", "Watermelon Tide"
+];
 
 function bathBombLeadTimeMarkup(items) {
   if (!items.some(item => /\b(?:bath bombs?|spa gift box)\b/i.test([item.display_group, item.name, item.product_name].filter(Boolean).join(" ")))) return "";
@@ -1915,9 +1921,9 @@ function itemNoteMarkup(product) {
     const fields = [["Hand soap", "foaming hand soap"], ["Sugar scrub", "whipped sugar scrub"],
       ...Array.from({ length: count }, (_, i) => ["Bath bomb " + (i + 1), "bath bombs"])];
     const saved = itemNoteFor(product.id).split("\n");
-    return `<div class="item-note-field" data-spa-product="${product.id}">${fields.map(([label, group]) => {
+    return `<div class="item-note-field" data-spa-product="${product.id}">${fields.map(([label]) => {
       const selected = saved.find(line => line.startsWith(label + ": "))?.slice(label.length + 2) || "";
-      const scents = [...new Set(state.products.filter(p => cleanText(p.display_group).toLowerCase() === group).map(p => cleanText(p.option_label)))].filter(Boolean);
+      const scents = SPA_GIFT_SCENTS;
       return `<label>${label} scent<select data-spa-scent="${label}" required><option value="">Choose scent</option>${scents.map(scent => `<option value="${escapeAttribute(scent)}" ${scent === selected ? "selected" : ""}>${escapeHtml(scent)}</option>`).join("")}</select></label>`;
     }).join("")}</div>`;
   }
