@@ -819,6 +819,7 @@ h2 {
 }
 
 .spa-box-option > summary,
+.spa-box-heading,
 .spa-box-quantity {
   display: flex;
   align-items: center;

@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-spa-per-box-scents";
+const ASSET_VERSION = "20261026-spa-builder";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -98,6 +98,7 @@ const state = {
   quantities: {},
   itemNotes: {},
   flightBoxes: [],
+  spaBoxes: [],
   flightDraft: ["", "", "", ""],
   coupon: null,
   reward: null,
@@ -1135,6 +1136,7 @@ function saveOrderDraft() {
     quantities: state.quantities,
     itemNotes: state.itemNotes,
     flightBoxes: state.flightBoxes,
+    spaBoxes: state.spaBoxes,
     flightDraft: state.flightDraft,
     customerName: document.querySelector("#customer-name").value,
     customerPhone: el.customerPhone.value,
@@ -1197,6 +1199,16 @@ function restoreOrderDraft() {
     }
   });
 
+  state.spaBoxes = Array.isArray(draft.spaBoxes)
+    ? draft.spaBoxes.filter(box => Array.isArray(box.scents) && box.scents.length === 5)
+        .map(box => ({ id: cleanText(box.id) || crypto.randomUUID(), scents: box.scents.map(scent => SPA_GIFT_SCENTS.includes(scent) ? scent : "") }))
+    : state.products.filter(isSpaGiftProduct).flatMap(product =>
+        Array.from({length: Number(state.quantities[product.id] || 0)}, (_, index) => {
+          const fields = spaGiftFields(product).filter(field => field.box === index + 1);
+          const scents = fields.map(field => spaGiftScent(product, field));
+          return { id: crypto.randomUUID(), scents: Array.from({length:5},(_,i)=>scents[i] || "") };
+        }));
+  syncSpaGiftQuantities();
   const eligibleFlightIds = new Set(flightEligibleProducts().map(product => String(product.id)));
   state.flightBoxes = (draft.flightBoxes || [])
     .filter(box => Array.isArray(box.choices) && box.choices.length === 4)
@@ -1768,6 +1780,96 @@ function renderFlightBoxCard(card, product) {
   return card;
 }
 
+function isSpaGiftProduct(product) {
+  return cleanText(product?.display_group).toLowerCase() === "spa gift box";
+}
+
+function spaGiftProductForBox(box) {
+  const count = 1 + box.scents.slice(3).filter(Boolean).length;
+  return state.products.find(product => isSpaGiftProduct(product) && Number.parseInt(product.option_label, 10) === count);
+}
+
+function spaGiftBoxNotes(box) {
+  const labels = ["Hand soap", "Sugar scrub", "Bath bomb 1", "Bath bomb 2", "Bath bomb 3"];
+  return "Box " + (state.spaBoxes.findIndex(item => item.id === box.id) + 1) + "\n" + box.scents.map((scent, index) => scent ? labels[index] + ": " + scent : "").filter(Boolean).join("\n");
+}
+
+function syncSpaGiftQuantities() {
+  state.products.filter(isSpaGiftProduct).forEach(product => {
+    state.quantities[product.id] = 0;
+    delete state.itemNotes[product.id];
+  });
+  state.spaBoxes.forEach(box => {
+    const product = spaGiftProductForBox(box);
+    if (product) state.quantities[product.id] = (state.quantities[product.id] || 0) + 1;
+  });
+}
+
+function refreshSpaGiftOrder() {
+  syncSpaGiftQuantities();
+  state.orderTotals = null;
+  if (state.coupon) resetCoupon("Order changed. Apply your coupon again before checkout.");
+  renderProducts();
+  updateSummary();
+  syncPageFlow();
+  updateShippingFields();
+  saveOrderDraft();
+  safelyRenderCheckoutReview();
+}
+
+function renderSpaGiftCard(card, products) {
+  const product = products[0];
+  const boxes = state.spaBoxes.length ? state.spaBoxes : [{id:"spa-draft",scents:["","","","",""]}];
+  const labels = ["Hand soap", "Sugar scrub", "Bath bomb 1", "Bath bomb 2 (optional)", "Bath bomb 3 (optional)"];
+  card.innerHTML = `
+    ${productImageMarkup(products,"Spa Gift Box")}
+    <div class="option-card-heading"><h3>Spa Gift Box</h3><div class="group-subtotal"><span>Item subtotal</span><strong>${money(cardSubtotalCents(products))}</strong></div></div>
+    <span class="shipping-badge pickup-only">Pickup only</span>
+    <p>8 oz hand soap, 4 oz sugar scrub, and one 4 oz bath bomb. $18 per box; $4 per additional bath bomb.</p>
+    ${bathBombLeadTimeMarkup(products)}
+    ${groupedProductDescriptionMarkup(groupedProductDescription(products))}
+    ${boxes.map((box,index)=>`
+      <section class="spa-box-option" data-spa-box="${box.id}">
+        <div class="spa-box-heading"><h4>Box ${index+1}</h4><strong data-spa-box-price>${money(spaGiftProductForBox(box)?.price_cents || 1800)}</strong></div>
+        <div class="item-note-field">${labels.map((label,field)=>`
+          <label>${label} scent<select data-spa-box-field="${field}">
+            <option value="">${field<3?"Choose scent":"None"}</option>
+            ${SPA_GIFT_SCENTS.map(scent=>`<option value="${escapeAttribute(scent)}" ${box.scents[field]===scent?"selected":""}>${escapeHtml(scent)}</option>`).join("")}
+          </select></label>`).join("")}</div>
+        ${state.spaBoxes.length ? `<button class="secondary-button" type="button" data-remove-spa-box="${box.id}">Remove box ${index+1}</button>`:""}
+      </section>`).join("")}
+    <button class="secondary-button" type="button" data-add-spa-box>Add another box</button>
+  `;
+  card.querySelectorAll("[data-spa-box-field]").forEach(select=>select.addEventListener("change",()=>{
+    const row = select.closest("[data-spa-box]");
+    let box = state.spaBoxes.find(item=>item.id===row.dataset.spaBox);
+    if (!box) {
+      if (productTracksInventory(product) && selectedInventoryQuantity(product)>=inventoryQuantityFor(product)) {
+        setMessage("No more hand soap is available for gift boxes.","error");renderProducts();return;
+      }
+      box={id:crypto.randomUUID(),scents:["","","","",""]};state.spaBoxes.push(box);
+    }
+    box.scents[Number(select.dataset.spaBoxField)]=select.value;
+    refreshSpaGiftOrder();
+  }));
+  card.querySelector("[data-add-spa-box]").addEventListener("click",()=>{
+    const addCount=state.spaBoxes.length?1:2;
+    if(productTracksInventory(product) && selectedInventoryQuantity(product)+addCount>inventoryQuantityFor(product)) {
+      setMessage("Not enough hand soap is available for another gift box.","error");return;
+    }
+    for(let i=0;i<addCount;i++) state.spaBoxes.push({id:crypto.randomUUID(),scents:["","","","",""]});
+    refreshSpaGiftOrder();
+  });
+  card.querySelectorAll("[data-image-viewer-src]").forEach(button => button.addEventListener("click", () => {
+    openImageViewer(button.dataset.imageViewerSrc, button.dataset.imageViewerAlt || "Spa Gift Box");
+  }));
+  card.querySelectorAll("[data-remove-spa-box]").forEach(button=>button.addEventListener("click",()=>{
+    state.spaBoxes=state.spaBoxes.filter(box=>box.id!==button.dataset.removeSpaBox);
+    refreshSpaGiftOrder();
+  }));
+  return card;
+}
+
 function renderProductCard(products) {
   const card = document.createElement("article");
   const sortedProducts = products
@@ -1779,6 +1881,8 @@ function renderProductCard(products) {
   const isGrouped = products.length > 1 || Boolean(groupName);
   const sharedDescription = groupedProductDescription(sortedProducts);
   card.className = `product ${isGrouped ? "option-product" : ""}`;
+
+  if (isSpaGiftProduct(primaryProduct)) return renderSpaGiftCard(card, sortedProducts);
 
   if (isFlightBoxProduct(primaryProduct)) {
     return renderFlightBoxCard(card, primaryProduct);
@@ -1808,7 +1912,7 @@ function renderProductCard(products) {
       ${state.quantities[primaryProduct.id] > 0 ? itemNoteMarkup(primaryProduct) : ""}
     `;
   } else {
-    let optionTableMarkup = `
+    const optionTableMarkup = `
       <div class="option-table">
         <div class="option-table-head">
           <span>Option</span>
@@ -1842,22 +1946,6 @@ function renderProductCard(products) {
         <strong>${money(cardSubtotalCents(sortedProducts))}</strong>
       </div>
     `;
-    const isSpaGiftBox = cleanText(groupName).toLowerCase() === "spa gift box";
-    if (isSpaGiftBox) {
-      optionTableMarkup = sortedProducts.map((product, index) => `
-        <details class="spa-box-option" ${index === 0 || state.quantities[product.id] > 0 ? "open" : ""}>
-          <summary><strong>${optionLabelFor(product)}</strong><strong>${money(product.price_cents)}</strong></summary>
-          ${optionDescriptionMarkup(product, sharedDescription)}
-          ${itemNoteMarkup(product)}
-          <div class="spa-box-quantity"><span>Gift boxes</span>
-            <div class="quantity" aria-label="${escapeAttribute(displayNameFor(product))} quantity">
-              <button type="button" data-action="minus" data-product-id="${product.id}" aria-label="Remove one gift box">-</button>
-              <span data-qty="${product.id}">${state.quantities[product.id]}</span>
-              <button type="button" data-action="plus" data-product-id="${product.id}" aria-label="Add one gift box">+</button>
-            </div>
-          </div>
-        </details>`).join("");
-    }
     const isBathBodyCard = productTabFor(primaryProduct) === "bath-body";
     const selectedOptionCount = sortedProducts.reduce(
       (sum, product) => sum + Number(state.quantities[product.id] || 0),
@@ -1866,7 +1954,7 @@ function renderProductCard(products) {
     const optionDisclosureLabel = cleanText(groupName).toLowerCase() === "spa gift box" ? "View gift box options" : "View scent options";
     const optionsMarkup = isBathBodyCard
       ? `
-        <details class="product-options-disclosure" ${isSpaGiftBox || selectedOptionCount > 0 ? "open" : ""}>
+        <details class="product-options-disclosure" ${selectedOptionCount > 0 ? "open" : ""}>
           <summary>
             <span>${optionDisclosureLabel}</span>
             <small>${sortedProducts.length} option${sortedProducts.length === 1 ? "" : "s"}</small>
@@ -1911,15 +1999,6 @@ function renderProductCard(products) {
     });
   });
 
-  card.querySelectorAll("[data-spa-scent]").forEach(select => {
-    select.addEventListener("change", () => {
-      const container = select.closest("[data-spa-product]");
-      state.itemNotes[container.dataset.spaProduct] = [...container.querySelectorAll("[data-spa-scent]")]
-        .map(input => input.dataset.spaScent + ": " + input.value).join("\n");
-      saveOrderDraft();
-      refreshCheckoutReview();
-    });
-  });
   card.querySelectorAll("[data-item-note]").forEach(input => {
     input.addEventListener("input", () => {
       state.itemNotes[input.dataset.itemNote] = input.value;
@@ -1946,12 +2025,6 @@ function spaGiftScent(product, field) {
 }
 
 function itemNoteMarkup(product) {
-  if (cleanText(product.display_group).toLowerCase() === "spa gift box") {
-    return `<div class="item-note-field" data-spa-product="${product.id}">${spaGiftFields(product).map(field => {
-      const selected = spaGiftScent(product, field);
-      return `${field.label === "Hand soap" ? '<strong>Gift box ' + field.box + '</strong>' : ''}<label>${field.label} scent<select data-spa-scent="${field.key}" required><option value="">Choose scent</option>${SPA_GIFT_SCENTS.map(scent => `<option value="${escapeAttribute(scent)}" ${scent === selected ? "selected" : ""}>${escapeHtml(scent)}</option>`).join("")}</select></label>`;
-    }).join("")}</div>`;
-  }
   return `
     <label class="item-note-field">
       Item note
@@ -2020,10 +2093,6 @@ function updateProductQuantity(action, product) {
     setMessage();
   }
 
-  if (cleanText(product.display_group).toLowerCase() === "spa gift box" && state.quantities[product.id] > 0) {
-    const notes = spaGiftFields(product).map(field => field.key + ": " + spaGiftScent(product, field));
-    state.itemNotes[product.id] = notes.join("\n");
-  }
   if (state.reward && !rewardEligibleInCart(state.reward.type)) {
     const removedReward = rewardLabel(state.reward.type);
     state.reward = null;
@@ -2190,7 +2259,7 @@ function selectedItemsWithDetails() {
       product: productsById.get(String(productId)),
       quantity: Math.max(Number(quantity || 0), 0)
     }))
-    .filter(({ product, quantity }) => product && quantity > 0)
+    .filter(({ product, quantity }) => product && quantity > 0 && !isSpaGiftProduct(product))
     .map(({ product, quantity }) => ({
       product_id: product.id,
       name: displayNameFor(product) || "Order item",
@@ -2220,7 +2289,15 @@ function selectedItemsWithDetails() {
       }))
     : [];
 
-  return [...standardItems, ...flightItems].sort((a, b) => compareText(a.name, b.name));
+  const spaItems = state.spaBoxes.map((box, index) => {
+    const product = spaGiftProductForBox(box);
+    if (!product) return null;
+    return { product_id: product.id, configuration_id: box.id, spa_box: true,
+      name: "Spa Gift Box " + (index + 1) + " - " + product.option_label, quantity: 1,
+      item_note: spaGiftBoxNotes(box), price_cents: Number(product.price_cents),
+      capacity_units: 0, image_url: product.image_url, shippable: productIsShippable(product), productTab: "bath-body" };
+  }).filter(Boolean);
+  return [...standardItems, ...flightItems, ...spaItems].sort((a, b) => compareText(a.name, b.name));
 }
 
 function customerDetails() {
@@ -2294,7 +2371,7 @@ function renderCheckoutReview() {
               class="remove-cart-item"
               type="button"
               ${item.configuration_id
-                ? `data-remove-flight="${escapeAttribute(item.configuration_id)}"`
+                ? item.spa_box ? `data-remove-spa="${escapeAttribute(item.configuration_id)}"` : `data-remove-flight="${escapeAttribute(item.configuration_id)}"`
                 : `data-review-action="remove" data-product-id="${item.product_id}"`}
             >
               Remove
@@ -2351,6 +2428,12 @@ function renderCheckoutReview() {
     button.addEventListener("click", () => updateProductQuantity(button.dataset.reviewAction, product));
   });
 
+  el.reviewContent.querySelectorAll("[data-remove-spa]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.spaBoxes = state.spaBoxes.filter(box => box.id !== button.dataset.removeSpa);
+      refreshSpaGiftOrder();
+    });
+  });
   el.reviewContent.querySelectorAll("[data-remove-flight]").forEach(button => {
     button.addEventListener("click", () => {
       state.flightBoxes = state.flightBoxes.filter(box => box.id !== button.dataset.removeFlight);
@@ -2402,10 +2485,7 @@ async function submitReviewedOrder() {
     return;
   }
 
-  const missingSpaScent = state.products.some(product => {
-    if (cleanText(product.display_group).toLowerCase() !== "spa gift box" || !state.quantities[product.id]) return false;
-    return spaGiftFields(product).some(field => !spaGiftScent(product, field));
-  });
+  const missingSpaScent = state.spaBoxes.some(box => box.scents.slice(0,3).some(scent => !SPA_GIFT_SCENTS.includes(scent)));
   if (missingSpaScent) {
     setMessage("Please choose a scent for every item in your Spa Gift Box.", "error");
     return;
@@ -2413,7 +2493,7 @@ async function submitReviewedOrder() {
   const items = selectedItemsWithDetails().map(item => ({
     product_id: item.product_id,
     quantity: item.quantity,
-    item_note: item.configuration_id ? "" : item.item_note,
+    item_note: item.flight_choices ? "" : item.item_note,
     ...(item.flight_choices ? { flight_choices: item.flight_choices } : {})
   }));
 
@@ -2658,6 +2738,7 @@ function showSuccess(result, paymentMethod, invoiceRequested, items, details, co
   el.tipAmount.value = "";
   state.quantities = {};
   state.itemNotes = {};
+  state.spaBoxes = [];
   state.flightBoxes = [];
   state.flightDraft = ["", "", "", ""];
   clearOrderDraft();
@@ -2672,6 +2753,7 @@ async function startAnotherOrder() {
   state.selectedDate = null;
   state.quantities = {};
   state.itemNotes = {};
+  state.spaBoxes = [];
   state.flightBoxes = [];
   state.flightDraft = ["", "", "", ""];
   state.orderTotals = null;
