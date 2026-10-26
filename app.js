@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-spa-configure-first";
+const ASSET_VERSION = "20261026-spa-per-box-scents";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -1931,16 +1931,25 @@ function renderProductCard(products) {
   return card;
 }
 
+function spaGiftFields(product) {
+  const bombs = Number.parseInt(product.option_label, 10) || 1;
+  const labels = ["Hand soap", "Sugar scrub", ...Array.from({ length: bombs }, (_, i) => "Bath bomb " + (i + 1))];
+  return Array.from({ length: Math.max(1, Number(state.quantities[product.id] || 0)) }, (_, box) =>
+    labels.map(label => ({ box: box + 1, label, key: "Box " + (box + 1) + " - " + label }))).flat();
+}
+
+function spaGiftScent(product, field) {
+  const lines = itemNoteFor(product.id).split("\n");
+  const line = lines.find(note => note.startsWith(field.key + ": "));
+  if (line) return line.slice(field.key.length + 2).trim();
+  return field.box === 1 ? (lines.find(note => note.startsWith(field.label + ": ")) || "").slice(field.label.length + 2).trim() : "";
+}
+
 function itemNoteMarkup(product) {
   if (cleanText(product.display_group).toLowerCase() === "spa gift box") {
-    const count = Number.parseInt(product.option_label, 10) || 1;
-    const fields = [["Hand soap", "foaming hand soap"], ["Sugar scrub", "whipped sugar scrub"],
-      ...Array.from({ length: count }, (_, i) => ["Bath bomb " + (i + 1), "bath bombs"])];
-    const saved = itemNoteFor(product.id).split("\n");
-    return `<div class="item-note-field" data-spa-product="${product.id}">${fields.map(([label]) => {
-      const selected = saved.find(line => line.startsWith(label + ": "))?.slice(label.length + 2) || "";
-      const scents = SPA_GIFT_SCENTS;
-      return `<label>${label} scent<select data-spa-scent="${label}" required><option value="">Choose scent</option>${scents.map(scent => `<option value="${escapeAttribute(scent)}" ${scent === selected ? "selected" : ""}>${escapeHtml(scent)}</option>`).join("")}</select></label>`;
+    return `<div class="item-note-field" data-spa-product="${product.id}">${spaGiftFields(product).map(field => {
+      const selected = spaGiftScent(product, field);
+      return `${field.label === "Hand soap" ? '<strong>Gift box ' + field.box + '</strong>' : ''}<label>${field.label} scent<select data-spa-scent="${field.key}" required><option value="">Choose scent</option>${SPA_GIFT_SCENTS.map(scent => `<option value="${escapeAttribute(scent)}" ${scent === selected ? "selected" : ""}>${escapeHtml(scent)}</option>`).join("")}</select></label>`;
     }).join("")}</div>`;
   }
   return `
@@ -2011,6 +2020,10 @@ function updateProductQuantity(action, product) {
     setMessage();
   }
 
+  if (cleanText(product.display_group).toLowerCase() === "spa gift box" && state.quantities[product.id] > 0) {
+    const notes = spaGiftFields(product).map(field => field.key + ": " + spaGiftScent(product, field));
+    state.itemNotes[product.id] = notes.join("\n");
+  }
   if (state.reward && !rewardEligibleInCart(state.reward.type)) {
     const removedReward = rewardLabel(state.reward.type);
     state.reward = null;
@@ -2391,10 +2404,7 @@ async function submitReviewedOrder() {
 
   const missingSpaScent = state.products.some(product => {
     if (cleanText(product.display_group).toLowerCase() !== "spa gift box" || !state.quantities[product.id]) return false;
-    const count = Number.parseInt(product.option_label, 10) || 1;
-    const labels = ["Hand soap", "Sugar scrub", ...Array.from({ length: count }, (_, i) => "Bath bomb " + (i + 1))];
-    const notes = itemNoteFor(product.id).split("\n");
-    return labels.some(label => !notes.some(line => line.startsWith(label + ": ") && line.slice(label.length + 2).trim()));
+    return spaGiftFields(product).some(field => !spaGiftScent(product, field));
   });
   if (missingSpaScent) {
     setMessage("Please choose a scent for every item in your Spa Gift Box.", "error");
