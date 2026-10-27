@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-spa-builder";
+const ASSET_VERSION = "20261026-mini-granola";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -389,7 +389,25 @@ function isBathBombGroup(groupName) {
   return cleanText(groupName).toLowerCase() === "bath bombs";
 }
 
+function isMiniGranolaProduct(product) {
+  return cleanText(product?.display_group).toLowerCase() === "mini granola gift pouches"
+    || cleanText(product?.name).toLowerCase().startsWith("mini granola");
+}
+
+function miniGranolaQuantity() {
+  return state.products.reduce((sum, product) => sum + (isMiniGranolaProduct(product) ? Number(state.quantities[product.id] || 0) : 0), 0);
+}
+
+function miniGranolaMinimumMessage() {
+  const quantity = miniGranolaQuantity();
+  return quantity > 0 && quantity < 5 ? "Mini granola requires at least 5 pouches total. Add " + (5 - quantity) + " more or remove the mini pouches." : "";
+}
+
 function productPromoMarkup(groupName) {
+  if (cleanText(groupName).toLowerCase() === "mini granola gift pouches") {
+    const quantity = miniGranolaQuantity();
+    return `<div class="product-promo-banner"><strong>$4 each · Minimum 5 pouches · Mix and match flavors</strong><span role="status">${quantity < 5 ? quantity + " of 5 minimum pouches selected" : quantity + " pouches · " + money(quantity * 400)}</span></div>`;
+  }
   if (cleanText(groupName).toLowerCase() === "whipped sugar scrub") {
     return `<div class="product-promo-banner"><strong>$6 each or mix and match 2 for $10.</strong><span>Discount reflects at checkout.</span></div>`;
   }
@@ -417,6 +435,7 @@ function discountCents() {
 }
 
 function isGranolaProduct(product) {
+  if (isMiniGranolaProduct(product)) return false;
   const group = cleanText(product?.display_group).toLowerCase();
   const name = cleanText(product?.name).toLowerCase();
   return group === "homemade granola"
@@ -611,6 +630,7 @@ function cardKeyFor(product) {
 }
 
 function cardTitleFor(product) {
+  if (isMiniGranolaProduct(product)) return "Mini Granola Gift Pouches - 4 oz";
   const groupName = groupNameFor(product);
   const normalizedGroup = cleanText(groupName).toLowerCase();
 
@@ -776,7 +796,7 @@ function optionDescriptionMarkup(product, sharedDescription = "") {
 function groupedProductDescription(products) {
   const primaryProduct = products[0];
   const displayGroup = cleanText(primaryProduct?.display_group).toLowerCase();
-  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub", "spa gift box"]);
+  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub", "spa gift box", "mini granola gift pouches"]);
   if (!supportedGroups.has(displayGroup)) return "";
 
   const descriptions = products
@@ -2350,6 +2370,7 @@ function renderCheckoutReview() {
     ${details.fulfillmentMethod === "shipping" && details.shippingAddress ? `
       <p class="admin-notes"><strong>Shipping address:</strong> ${escapeHtml(details.shippingAddress)}</p>
     ` : ""}
+    ${miniGranolaMinimumMessage() ? '<p class="message error" role="status">' + escapeHtml(miniGranolaMinimumMessage()) + '</p>' : ''}
     <div class="invoice-items">
       ${items.map(item => `
         <div class="checkout-review-item">
@@ -2485,6 +2506,10 @@ async function submitReviewedOrder() {
     return;
   }
 
+  if (miniGranolaMinimumMessage()) {
+    setMessage(miniGranolaMinimumMessage(), "error");
+    return;
+  }
   const missingSpaScent = state.spaBoxes.some(box => box.scents.slice(0,3).some(scent => !SPA_GIFT_SCENTS.includes(scent)));
   if (missingSpaScent) {
     setMessage("Please choose a scent for every item in your Spa Gift Box.", "error");
