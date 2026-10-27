@@ -319,7 +319,7 @@ function replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCod
         itemRows.push([
           orderId,
           orderDate,
-          item.product_name || "",
+          spreadsheetProductName(item.product_name),
           Number(item.quantity || 0),
           centsToDollars(item.unit_price_cents),
           productCostFormula(itemRowNumber),
@@ -343,6 +343,16 @@ function replaceWebsiteOrderItems(orderItemsSheet, websiteOrders, orderRowsByCod
   const targetRange = orderItemsSheet.getRange(startRow, 1, itemRows.length, 11);
   targetRange.clearDataValidations();
   targetRange.setValues(itemRows);
+}
+
+function spreadsheetProductName(name) {
+  const value = String(name || "").trim();
+  const aliases = {
+    "honey butter-8 oz": "Honey Butter - 8 oz",
+    "banana sourdough - pecan": "Banana Pecan"
+  };
+
+  return aliases[value.toLowerCase()] || value;
 }
 
 function replaceFlightBoxComponents(componentsSheet, websiteOrders, orderRowsByCode) {
@@ -378,9 +388,9 @@ function replaceFlightBoxComponents(componentsSheet, websiteOrders, orderRowsByC
             flightQuantity,
             component.salePrice,
             `=IF(F${rowNumber}="","",IFERROR(INDEX(Recipes!$E:$E,MATCH(F${rowNumber},Recipes!$A:$A,0)),""))`,
-            `=IF(OR(G${rowNumber}="",I${rowNumber}=""),"",G${rowNumber}*(I${rowNumber}/3+IFERROR(INDEX(Ingredients!$E:$E,MATCH("Mini Loaf Flight Box Packaging",Ingredients!$A:$A,0)),0)/4))`,
+            flightComponentCostFormula(rowNumber),
             `=IF(OR(G${rowNumber}="",H${rowNumber}="",J${rowNumber}=""),"",G${rowNumber}*H${rowNumber}-J${rowNumber})`,
-            "Estimated cost includes one-third of the matching full-loaf recipe cost plus one-fourth of the flight box packaging cost."
+            "Estimated cost uses one-third of the full-loaf non-fixed recipe cost, full baking/parchment/label costs, one $0.05 mini bag, and one-fourth of the $1.45 flight-box packaging."
           ]);
         });
       });
@@ -402,7 +412,7 @@ function parseFlightBoxComponents(item) {
   const fallbackPrice = centsToDollars(Number(item.unit_price_cents || 0) / 4);
 
   return lines.map(line => {
-    const match = line.trim().match(/^Loaf\s+(\d+):\s+(.+?)(?:\s+\[\$(\d+(?:\.\d{1,2})?)\])?$/i);
+    const match = line.trim().match(/^Loaf\s+(\d+):\s+(.+?)(?:\s+\[\$?(\d+(?:\.\d{1,2})?)\])?$/i);
     if (!match) return null;
 
     return {
@@ -411,6 +421,13 @@ function parseFlightBoxComponents(item) {
       salePrice: match[3] ? Number(match[3]) : fallbackPrice
     };
   }).filter(Boolean);
+}
+
+function flightComponentCostFormula(row) {
+  const fixedFull = `SUM(FILTER('Recipe Ingredients'!$G:$G,'Recipe Ingredients'!$A:$A=base,REGEXMATCH('Recipe Ingredients'!$B:$B,"^(Baking per hour oven/gas|Parchment Liners 9x5|Plastic Bread Covers|Bread Bag|Labels|Dymo Label)$")))`;
+  const miniFixed = `SUM(FILTER('Recipe Ingredients'!$G:$G,'Recipe Ingredients'!$A:$A=base,REGEXMATCH('Recipe Ingredients'!$B:$B,"^(Baking per hour oven/gas|Parchment Liners 9x5|Labels|Dymo Label)$")))+XLOOKUP("Mini Loaf Bag",Ingredients!$A:$A,Ingredients!$E:$E,0)`;
+
+  return `=IF(OR(G${row}="",F${row}="",I${row}=""),"",IFERROR(G${row}*LET(base,F${row},full,I${row},fixedFull,${fixedFull},miniFixed,${miniFixed},(full-fixedFull)/3+miniFixed+XLOOKUP("Mini Loaf Flight Box Packaging",Ingredients!$A:$A,Ingredients!$E:$E,0)/4),""))`;
 }
 
 function deleteExistingFlightComponents(sheet, websiteOrderCodes) {
@@ -819,7 +836,7 @@ function lastFilledRow(sheet, column) {
 function productCostFormula(row) {
   const flightNumber = `COUNTIFS($J$2:$J${row},$J${row},$C$2:$C${row},"Mini Loaf Flight Box")`;
   const flightCost = `SUMIFS('Flight Box Components'!$J:$J,'Flight Box Components'!$C:$C,$J${row},'Flight Box Components'!$D:$D,"Flight "&${flightNumber})/MAX(1,$D${row})`;
-  const standardCost = `INDEX(FILTER('Price History'!$E$2:$E$501,('Price History'!$A$2:$A$501=$C${row})*('Price History'!$B$2:$B$501<=$B${row})*(('Price History'!$C$2:$C$501="")+('Price History'!$C$2:$C$501>=$B${row}))),1)`;
+  const standardCost = `INDEX(FILTER('Price History'!$E$2:$E$1000,('Price History'!$A$2:$A$1000=$C${row})*('Price History'!$B$2:$B$1000<=$B${row})*(('Price History'!$C$2:$C$1000="")+('Price History'!$C$2:$C$1000>=$B${row}))),1)`;
 
   return `=IF(OR($B${row}="",$C${row}=""),"",IFERROR(IF(LOWER(TRIM($C${row}))="mini loaf flight box",${flightCost},${standardCost}),""))`;
 }
