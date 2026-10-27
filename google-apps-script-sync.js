@@ -23,10 +23,12 @@ function doPost(event) {
   try {
     const payload = parseSyncRequestPayload(event);
     validateAdminSyncRequest(payload.access_token);
-    syncWebsiteOrdersWithLock();
+    const synced = syncWebsiteOrdersWithLock();
 
     return jsonResponse({
       ok: true,
+      synced,
+      message: synced ? "Google Sheet sync completed." : "Another sync was already running; this request was skipped.",
       synced_at: new Date().toISOString()
     });
   } catch (error) {
@@ -71,12 +73,14 @@ function validateAdminSyncRequest(accessToken) {
 function syncWebsiteOrdersWithLock() {
   const lock = LockService.getScriptLock();
 
-  if (!lock.tryLock(10000)) {
-    throw new Error("A Google Sheet sync is already running. Try again in a minute.");
+  if (!lock.tryLock(30000)) {
+    Logger.log("Skipped Google Sheet sync because another sync is already running.");
+    return false;
   }
 
   try {
     syncWebsiteOrders();
+    return true;
   } finally {
     lock.releaseLock();
   }
