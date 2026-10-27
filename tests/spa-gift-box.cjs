@@ -46,6 +46,12 @@ const { chromium } = require("playwright");
     }
     await page.locator('[data-shop-collection="bath-body"]').click();
 
+    const giftBadge = page.locator('.product').filter({has:page.locator('[data-add-spa-box]')}).locator('.shipping-badge');
+    assert.equal(await giftBadge.innerText(), 'Pickup only');
+    await page.evaluate(() => { state.products.find(p => p.id === 'gift1').shippable = true; renderProducts(); });
+    assert.equal(await giftBadge.innerText(), 'Some options can ship');
+    await page.evaluate(() => { state.products.filter(isSpaGiftProduct).forEach(p => p.shippable = true); renderProducts(); });
+    assert.equal(await giftBadge.innerText(), 'Can ship');
     const box = index => page.locator('[data-spa-box]').nth(index);
     const scent = (index,field,value) => box(index).locator('[data-spa-box-field="'+field+'"]').selectOption(value);
     assert.equal(await page.locator('[data-spa-box]').count(),1);
@@ -64,6 +70,7 @@ const { chromium } = require("playwright");
     await scent(1,0,"Be Joyful");await scent(1,1,"Milk Violet");await scent(1,2,"Hawaiian Sunrise");
     assert.equal(await page.evaluate(()=>selectedTotalCents()),4400);
     assert.equal(await page.evaluate(()=>selectedItemsWithDetails().length),2);
+    assert.equal(await page.evaluate(()=>selectedItemsWithDetails().every(item => item.shippable)),true);
     assert.equal(await page.evaluate(()=>productBundleDiscountCents()),0);
     await page.reload();await page.waitForSelector('[data-spa-box-field]');
     assert.equal(await page.locator('[data-spa-box]').count(),2);

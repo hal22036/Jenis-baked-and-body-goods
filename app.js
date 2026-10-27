@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-pumpkin-ingredients";
+const ASSET_VERSION = "20261026-spa-shipping";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -1844,7 +1844,7 @@ function renderSpaGiftCard(card, products) {
   card.innerHTML = `
     ${productImageMarkup(products,"Spa Gift Box")}
     <div class="option-card-heading"><h3>Spa Gift Box</h3><div class="group-subtotal"><span>Item subtotal</span><strong>${money(cardSubtotalCents(products))}</strong></div></div>
-    <span class="shipping-badge pickup-only">Pickup only</span>
+    <span class="shipping-badge ${products.some(productIsShippable) ? "can-ship" : "pickup-only"}">${products.every(productIsShippable) ? "Can ship" : products.some(productIsShippable) ? "Some options can ship" : "Pickup only"}</span>
     <p>8 oz hand soap, 4 oz sugar scrub, and one 4 oz bath bomb. $18 per box; $4 per additional bath bomb.</p>
     ${bathBombLeadTimeMarkup(products)}
     ${groupedProductDescriptionMarkup(groupedProductDescription(products))}
