@@ -9,7 +9,7 @@
 
 const SUPABASE_URL = "https://qvxrbipxxlygmmecgjxf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-w4Ef_bqgM_l9bY00thSpg_xohk7e9M";
-const ASSET_VERSION = "20261026-mini-granola";
+const ASSET_VERSION = "20261026-pumpkin-ingredients";
 
 const SPA_GIFT_SCENTS = [
   "Almond & Vanilla", "Be Joyful", "Bright Citrus & Sunflower", "Citrus By Dae",
@@ -796,7 +796,7 @@ function optionDescriptionMarkup(product, sharedDescription = "") {
 function groupedProductDescription(products) {
   const primaryProduct = products[0];
   const displayGroup = cleanText(primaryProduct?.display_group).toLowerCase();
-  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub", "spa gift box", "mini granola gift pouches"]);
+  const supportedGroups = new Set(["foaming hand soap", "bath bombs", "bath bomb", "whipped sugar scrub", "spa gift box", "mini granola gift pouches", "pumpkin spice honey butter"]);
   if (!supportedGroups.has(displayGroup)) return "";
 
   const descriptions = products

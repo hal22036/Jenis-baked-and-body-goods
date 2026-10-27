@@ -17,11 +17,11 @@ const { chromium } = require("playwright");
         from: table => {
           const data = table === "products" ? [
             {id:"regular4",name:"Honey Butter - 4 oz",display_group:"Honey Butter",option_label:"4 oz",price_cents:300,sort_order:1,capacity_units:0,category:"Other Delicious Treats",active:true},
-{id:"pumpkin4",name:"Pumpkin Spice Honey Butter - 4 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"4 oz",price_cents:300,sort_order:1,image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
+{id:"pumpkin4",name:"Pumpkin Spice Honey Butter - 4 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"4 oz",price_cents:300,sort_order:1,description:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",label_ingredients:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
 {id:"regular8",name:"Honey Butter - 8 oz",display_group:"Honey Butter",option_label:"8 oz",price_cents:600,sort_order:2,capacity_units:0,category:"Other Delicious Treats",active:true},
-{id:"pumpkin8",name:"Pumpkin Spice Honey Butter - 8 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"8 oz",price_cents:600,sort_order:2,image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
+{id:"pumpkin8",name:"Pumpkin Spice Honey Butter - 8 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"8 oz",price_cents:600,sort_order:2,description:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",label_ingredients:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
 {id:"regular16",name:"Honey Butter - 16 oz",display_group:"Honey Butter",option_label:"16 oz",price_cents:1200,sort_order:3,capacity_units:0,category:"Other Delicious Treats",active:true},
-{id:"pumpkin16",name:"Pumpkin Spice Honey Butter - 16 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"16 oz",price_cents:1200,sort_order:3,image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
+{id:"pumpkin16",name:"Pumpkin Spice Honey Butter - 16 oz",display_group:"Pumpkin Spice Honey Butter",option_label:"16 oz",price_cents:1200,sort_order:3,description:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",label_ingredients:"Ingredients: Butter, organic honey, powdered sugar, vanilla extract, cinnamon, pumpkin spice (cinnamon, ginger, nutmeg, allspice, mace, cloves). Contains: Milk.",image_url:"assets/pump_spice_honey_butter.png",capacity_units:0,category:"Other Delicious Treats",active:true},
 { id: "bread", name: "Classic White", price_cents: 1000, capacity_units: 1, category: "Everyday", product_type: "standard", image_url: "assets/classic_white.PNG", active: true },
             { id: "soap", name: "Foaming Hand Soap - Almond", display_group: "Foaming Hand Soap", option_label: "Almond", price_cents: 1000, capacity_units: 0, category: "Bath & Body", product_type: "standard", image_url: "assets/foaming_soap.png", active: true },
             { id: "scrub", name: "Whipped Sugar Scrub - 4 oz - Almond", display_group: "Whipped Sugar Scrub", option_label: "Almond", description: "Top: Citrus, Almond", price_cents: 500, capacity_units: 0, category: "Bath & Body", track_inventory: false, inventory_quantity: 0, active: true },
@@ -52,6 +52,10 @@ const { chromium } = require("playwright");
     await page.locator('.date-button').click();
     const pumpkin=page.locator('.product').filter({hasText:'Pumpkin Spice Honey Butter'});
     assert.equal(await pumpkin.count(),1);
+    await pumpkin.locator('.grouped-product-description > summary').click();
+    assert.match(await pumpkin.innerText(),/pumpkin spice \(cinnamon, ginger, nutmeg, allspice, mace, cloves\)/);
+    assert.match(await pumpkin.innerText(),/Contains: Milk/);
+    assert.equal(await pumpkin.locator('.option-description').count(),0);
     assert.equal(await pumpkin.locator('[data-action="plus"]').count(),3);
     assert.deepEqual(await pumpkin.locator('.option-copy > strong').allTextContents(),['4 oz','8 oz','16 oz']);
     assert.deepEqual(await pumpkin.locator('.option-price').allTextContents(),['$3.00','$6.00','$12.00']);
